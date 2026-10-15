@@ -1,0 +1,39 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Python caches and build output
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Test output
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+junit*.xml
+test-results/
+playwright-report/
+reports/
+
+# Frontend
+node_modules/
+frontend/dist/
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store

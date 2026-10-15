@@ -1,0 +1,69 @@
+PY_VERSION ?= python3.12
+VENV       ?= .venv
+BIN        := $(VENV)/bin
+COMPOSE_DEV := docker compose -f infra/compose.dev.yml
+
+.DEFAULT_GOAL := help
+.PHONY: help dev-up dev-down install lint fmt migrate \
+        test-unit test-api test-integration test-lb test-e2e \
+        run-api run-worker run-controller
+
+help:  ## List targets
+	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-18s %s\n", $$1, $$2}'
+
+# --- Local services ---------------------------------------------------------
+
+dev-up:  ## Start Postgres, Redis and MinIO; wait until healthy and the bucket exists
+	$(COMPOSE_DEV) up -d --wait postgres redis minio
+	$(COMPOSE_DEV) run --rm minio-init
+
+dev-down:  ## Stop the local services (data volumes are kept)
+	$(COMPOSE_DEV) down
+
+# --- Python -----------------------------------------------------------------
+
+$(BIN)/python:
+	$(PY_VERSION) -m venv $(VENV)
+	$(BIN)/pip install --upgrade pip
+
+install: $(BIN)/python  ## Editable install with every extra (torch is installed only in the worker image)
+	$(BIN)/pip install -e '.[api,worker,controller,dev]'
+
+lint:  ## ruff check + format check
+	$(BIN)/ruff check .
+	$(BIN)/ruff format --check .
+
+fmt:  ## Apply ruff fixes and formatting
+	$(BIN)/ruff check --fix .
+	$(BIN)/ruff format .
+
+migrate:  ## Apply Alembic migrations
+	@echo "migrate: added in step 02"
+
+# --- Tests ------------------------------------------------------------------
+
+test-unit:  ## Unit tests (nothing external)
+	$(BIN)/pytest -m unit
+
+test-api:  ## API tests (testcontainers)
+	@echo "test-api: added in step 02"
+
+test-integration:  ## Worker integration tests (compose test stack)
+	@echo "test-integration: added in step 13"
+
+test-lb:  ## Load-balancer tests (compose test stack with Nginx)
+	@echo "test-lb: added in step 13"
+
+test-e2e:  ## Playwright end-to-end tests
+	@echo "test-e2e: added in step 13"
+
+# --- Run --------------------------------------------------------------------
+
+run-api:  ## Run the API server locally
+	@echo "run-api: added in step 04"
+
+run-worker:  ## Run one worker locally
+	@echo "run-worker: added in step 06"
+
+run-controller:  ## Run the controller locally
+	@echo "run-controller: added in step 08"
