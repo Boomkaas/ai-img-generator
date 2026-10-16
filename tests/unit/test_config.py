@@ -14,7 +14,7 @@ def clean_env(monkeypatch):
 
 
 def make(**overrides) -> Settings:
-    return Settings(_env_file=None, JWT_SECRET="x", **overrides)
+    return Settings(_env_file=None, JWT_SECRET="j" * 32, **overrides)
 
 
 def test_derived_timeouts_follow_the_formulas():
@@ -84,6 +84,11 @@ def test_jwt_secret_is_required(monkeypatch):
         Settings(_env_file=None)
 
 
+def test_short_jwt_secret_is_refused():
+    with pytest.raises(ValidationError, match="JWT_SECRET"):
+        Settings(_env_file=None, JWT_SECRET="j" * 31)
+
+
 def test_list_settings_parse_from_env(monkeypatch):
     monkeypatch.setenv("ALLOWED_ORIGINS", "https://a.example, https://b.example")
     monkeypatch.setenv("ALLOWED_SIZES", "[256, 512]")
@@ -99,3 +104,4 @@ def test_defaults_match_the_architecture():
     assert (s.MAX_QUEUED_TOTAL, s.MAX_HISTORY_PER_USER) == (30, 50)
     assert (s.PIPELINE, s.SCALER, s.COOKIE_SECURE) == ("real", "none", True)
     assert s.MACHINE_NAME
+    assert (s.DB_POOL_SIZE, s.DB_POOL_TIMEOUT_S) == (5, 5)

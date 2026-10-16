@@ -5,7 +5,7 @@ from common.validation import SubmitBody, ValidationProblem, validate
 
 pytestmark = pytest.mark.unit
 
-SETTINGS = Settings(_env_file=None, JWT_SECRET="x")
+SETTINGS = Settings(_env_file=None, JWT_SECRET="j" * 32)
 MAX_PROMPT_LEN = SETTINGS.MAX_PROMPT_LEN
 
 

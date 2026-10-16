@@ -1,8 +1,10 @@
+import itertools
 import time
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import insert
 from sqlalchemy.exc import IntegrityError
 
 from common import db
@@ -14,9 +16,26 @@ def make_user(email=None):
     return db.create_user(email or f"{uuid4()}@example.com", "argon2-hash")
 
 
+# Each test task is created one second after the previous one, so ordering by created_at never ties.
+CREATED_BASE = datetime.now(UTC) - timedelta(days=1)
+_ticks = itertools.count()
+
+
 def make_task(user, size=256, key=None):
+    stmt = (
+        insert(db.tasks)
+        .values(
+            user_id=user.id,
+            status="queued",
+            prompt="a cat",
+            size=size,
+            idempotency_key=key or uuid4(),
+            created_at=CREATED_BASE + timedelta(seconds=next(_ticks)),
+        )
+        .returning(*db.tasks.c)
+    )
     with db.transaction() as tx:
-        return db.insert_task(tx, user.id, "a cat", size, key or uuid4())
+        return tx.execute(stmt).one()
 
 
 def status(task):
