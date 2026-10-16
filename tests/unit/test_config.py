@@ -6,6 +6,13 @@ from common.config import Settings
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    """Ignore settings from the surrounding environment (CI sets PIPELINE=fake, for instance)."""
+    for name in Settings.model_fields:
+        monkeypatch.delenv(name, raising=False)
+
+
 def make(**overrides) -> Settings:
     return Settings(_env_file=None, JWT_SECRET="x", **overrides)
 
