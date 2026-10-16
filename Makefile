@@ -37,16 +37,16 @@ fmt:  ## Apply ruff fixes and formatting
 	$(BIN)/ruff check --fix .
 	$(BIN)/ruff format .
 
-migrate:  ## Apply Alembic migrations
-	@echo "migrate: added in step 02"
+migrate:  ## Apply Alembic migrations to DATABASE_URL
+	$(BIN)/alembic upgrade head
 
 # --- Tests ------------------------------------------------------------------
 
 test-unit:  ## Unit tests (nothing external)
 	$(BIN)/pytest -m unit
 
-test-api:  ## API tests (testcontainers)
-	@echo "test-api: added in step 02"
+test-api:  ## API tests (Postgres, Redis, MinIO via testcontainers; needs Docker)
+	$(BIN)/pytest -m api
 
 test-integration:  ## Worker integration tests (compose test stack)
 	@echo "test-integration: added in step 13"
