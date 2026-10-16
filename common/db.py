@@ -113,6 +113,7 @@ def get_engine() -> Engine:
         normalise_url(settings.DATABASE_URL),
         pool_size=settings.DB_POOL_SIZE,
         max_overflow=0,
+        pool_timeout=settings.DB_POOL_TIMEOUT_S,
         pool_pre_ping=True,
     )
 

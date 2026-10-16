@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # --- Connections ---
     DATABASE_URL: str = "postgresql+psycopg://imagegen:imagegen@localhost:5432/imagegen"
     DB_POOL_SIZE: int = Field(5, ge=1)
+    DB_POOL_TIMEOUT_S: float = Field(5, gt=0)  # wait for a free pooled connection before failing
     BROKER_URL: str = "redis://localhost:6379/0"
     REDIS_URL: str = "redis://localhost:6379/0"
     S3_ENDPOINT: str = "http://localhost:9000"
@@ -27,7 +28,7 @@ class Settings(BaseSettings):
     S3_BUCKET: str = "imagegen"
 
     # --- Auth ---
-    JWT_SECRET: str = Field(min_length=1)
+    JWT_SECRET: str = Field(min_length=32)  # HMAC key for HS256; at least 256 bits
     COOKIE_SECURE: bool = True
     ALLOWED_ORIGINS: Annotated[tuple[str, ...], NoDecode] = ("https://localhost",)
 
