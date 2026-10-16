@@ -32,6 +32,9 @@ reports/
 node_modules/
 frontend/dist/
 
+# Local review artifacts
+.claude/reviews/
+
 # Editors / OS
 .idea/
 .vscode/

@@ -46,3 +46,17 @@ jobs:
         run: make install
       - name: Unit tests
         run: make test-unit
+
+  api:
+    # testcontainers starts Postgres (later also Redis and MinIO) on the runner's Docker.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install
+        run: make install
+      - name: API tests
+        run: make test-api
