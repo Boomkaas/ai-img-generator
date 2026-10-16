@@ -54,7 +54,7 @@ line-length = 110
 target-version = "py312"
 # Python sources only: the code blocks in docs/*.md are sketches, not code to reformat.
 include = ["*.py", "*.pyi"]
-extend-exclude = ["frontend", "migrations/versions"]
+extend-exclude = ["frontend"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
