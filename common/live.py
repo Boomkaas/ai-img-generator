@@ -63,8 +63,17 @@ def machine_key(name: str) -> str:
 
 @lru_cache
 def client() -> redis.Redis:
-    """The process-wide sync client (workers, controller, HTTP handlers); thread-safe, pooled."""
-    return redis.Redis.from_url(get_settings().REDIS_URL, decode_responses=True)
+    """The process-wide sync client (workers, controller, HTTP handlers); thread-safe, pooled.
+
+    Every call is bounded, so a Redis that stops answering raises instead of hanging a worker or a handler.
+    """
+    settings = get_settings()
+    return redis.Redis.from_url(
+        settings.REDIS_URL,
+        decode_responses=True,
+        socket_connect_timeout=settings.REDIS_CONNECT_TIMEOUT_S,
+        socket_timeout=settings.REDIS_SOCKET_TIMEOUT_S,
+    )
 
 
 def reset_client() -> None:
@@ -75,8 +84,14 @@ def reset_client() -> None:
 
 
 def async_client() -> redis.asyncio.Redis:
-    """A new asyncio client; the caller owns it and closes it (the WebSocket fan-out, step 07)."""
-    return redis.asyncio.Redis.from_url(get_settings().REDIS_URL, decode_responses=True)
+    """A new asyncio client; the caller owns it and closes it (the WebSocket fan-out, step 07).
+
+    Only connecting is bounded: a pub/sub subscription can rightly wait minutes for its next message.
+    """
+    settings = get_settings()
+    return redis.asyncio.Redis.from_url(
+        settings.REDIS_URL, decode_responses=True, socket_connect_timeout=settings.REDIS_CONNECT_TIMEOUT_S
+    )
 
 
 def redis_run_id() -> str:
@@ -168,12 +183,13 @@ class MachineHeartbeat:
 
 
 # In-process state of each worker this process runs, keyed by host; the heartbeat thread publishes it.
+# The lock is held through each write, so writes reach Redis in order and an older beat never lands last.
 _workers: dict[str, dict] = {}
 _workers_lock = threading.Lock()
 
 
 def machine_of(host: str) -> str:
-    """ "nodeB-worker-2" -> "nodeB"; a host without "-worker-" runs on MACHINE_NAME."""
+    """The machine a worker runs on: "nodeB-worker-2" -> "nodeB"; without "-worker-", MACHINE_NAME."""
     if "-worker-" in host:
         return host.split("-worker-")[0]
     return get_settings().MACHINE_NAME
@@ -192,32 +208,50 @@ def _write_hash(key: str, mapping: dict, ttl: int) -> None:
 
 
 def _write_worker_heartbeat(host: str) -> None:
-    """Write one worker heartbeat; a Redis error is logged, and the next beat tries again."""
-    with _workers_lock:
-        current = dict(_workers[host])
-    mapping = {
-        "state": current["state"],
-        "task_id": current["task_id"],
-        "since": current["since"],
-        "machine": machine_of(host),
-        **_machine_figures(),
-        "rss_mb": psutil.Process().memory_info().rss // 2**20,
-    }
+    """Write one worker heartbeat; any error is logged, and the next beat tries again.
+
+    Nothing may escape: a heartbeat thread that died would make a working worker look lost to the sweeper.
+    """
     try:
-        _write_hash(worker_key(host), mapping, current["ttl"])
-    except redis.RedisError:
+        with _workers_lock:
+            current = _workers[host]
+            mapping = {
+                "state": current["state"],
+                "task_id": current["task_id"],
+                "since": current["since"],
+                "machine": machine_of(host),
+                **_machine_figures(),
+                "rss_mb": psutil.Process().memory_info().rss // 2**20,
+            }
+            _write_hash(worker_key(host), mapping, current["ttl"])
+    except Exception:
         log.warning("could not write the heartbeat of %s", host, exc_info=True)
+
+
+class Heartbeat(threading.Thread):
+    """The daemon thread that rewrites one worker's heartbeat every `interval` seconds."""
+
+    def __init__(self, host: str, interval: float):
+        super().__init__(name=f"heartbeat-{host}", daemon=True)
+        self.host = host
+        self.interval = interval
+        self._stopping = threading.Event()
+
+    def run(self) -> None:
+        while not self._stopping.wait(self.interval):
+            _write_worker_heartbeat(self.host)
+
+    def stop(self, timeout: float | None = None) -> None:
+        """Stop beating and wait for a write in progress to finish (tests; a worker just exits)."""
+        self._stopping.set()
+        self.join(timeout)
 
 
 def start_heartbeat(
     host: str, state: WorkerState, interval: float | None = None, ttl: int | None = None
-) -> threading.Event:
-    """Write the worker's heartbeat now and then every `interval` seconds from a daemon thread.
-
-    Returns an event that stops the thread when set (tests; a worker just exits).
-    """
+) -> Heartbeat:
+    """Write the worker's heartbeat now and then every `interval` seconds from a daemon thread."""
     settings = get_settings()
-    interval = interval or settings.HEARTBEAT_INTERVAL_S
     with _workers_lock:
         _workers[host] = {
             "state": state,
@@ -226,14 +260,9 @@ def start_heartbeat(
             "ttl": ttl or settings.HEARTBEAT_TTL_S,
         }
     _write_worker_heartbeat(host)
-    stop = threading.Event()
-
-    def loop():
-        while not stop.wait(interval):
-            _write_worker_heartbeat(host)
-
-    threading.Thread(target=loop, name=f"heartbeat-{host}", daemon=True).start()
-    return stop
+    beat = Heartbeat(host, interval or settings.HEARTBEAT_INTERVAL_S)
+    beat.start()
+    return beat
 
 
 def set_worker_state(host: str, state: WorkerState, task_id=None) -> None:
