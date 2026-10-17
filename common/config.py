@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY: str = "imagegen"
     S3_SECRET_KEY: str = "imagegen-dev-secret"
     S3_BUCKET: str = "imagegen"
+    S3_REGION: str = "us-east-1"  # MinIO ignores it, but request signing needs one
+    S3_STREAM_CHUNK_BYTES: int = Field(64 * 1024, ge=1)
 
     # --- Auth ---
     JWT_SECRET: str = Field(min_length=32)  # HMAC key for HS256; at least 256 bits
@@ -51,6 +53,13 @@ class Settings(BaseSettings):
     # --- Timing and estimates ---
     MEASURED_MAX_RUNTIME_S: int = Field(1080, gt=0)  # example; replaced after calibration (step 12)
     CALIBRATED_SECONDS_PER_COST_UNIT: float = Field(480, gt=0)
+    ESTIMATE_SAMPLE_SIZE: int = Field(50, ge=1)  # recent done tasks the median is taken over (§4.6)
+    ESTIMATE_MIN_SAMPLES: int = Field(5, ge=1)  # fewer than this: use the calibrated value
+
+    # --- Heartbeats and admin panel (§4.8) ---
+    HEARTBEAT_INTERVAL_S: float = Field(5, gt=0)
+    HEARTBEAT_TTL_S: int = Field(15, ge=1)  # a process that stops writing disappears after this
+    MAX_ALERTS: int = Field(20, ge=1)
 
     # --- Derived timeouts (§4.1); None means "derive from MEASURED_MAX_RUNTIME_S" ---
     TASK_SOFT_TIME_LIMIT: int | None = None
@@ -106,6 +115,11 @@ class Settings(BaseSettings):
         if self.MIN_WORKERS > self.MAX_WORKERS:
             raise ValueError(
                 f"MIN_WORKERS ({self.MIN_WORKERS}) must not exceed MAX_WORKERS ({self.MAX_WORKERS})"
+            )
+        if not self.HEARTBEAT_INTERVAL_S < self.HEARTBEAT_TTL_S:
+            raise ValueError(
+                f"HEARTBEAT_INTERVAL_S ({self.HEARTBEAT_INTERVAL_S}) must be less than "
+                f"HEARTBEAT_TTL_S ({self.HEARTBEAT_TTL_S})"
             )
         if not self.ALLOWED_SIZES:
             raise ValueError("ALLOWED_SIZES must not be empty")
