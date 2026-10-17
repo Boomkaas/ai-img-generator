@@ -5,12 +5,15 @@ from uuid import uuid4
 import pytest
 
 from common import db, estimate, live
-from common.config import get_settings
+from common.config import Settings, get_settings
 from common.estimate import cost, simulate_wait
 
 pytestmark = pytest.mark.unit
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
+SPU = (
+    480  # seconds per cost unit in these tests, passed explicitly so a calibrated value in .env can't leak in
+)
 
 # §1.3: cost relative to a 512 px job, as printed (rounded to two places).
 COST_TABLE = {256: 0.25, 384: 0.56, 512: 1.0, 640: 1.56, 768: 2.25}
@@ -42,7 +45,8 @@ def test_queue_is_served_oldest_first_on_the_earliest_free_worker():
 
 
 def test_cost_matches_the_table_for_every_allowed_size():
-    assert set(get_settings().ALLOWED_SIZES) == set(COST_TABLE)
+    # The code's default sizes, not whatever the local .env overrides them with.
+    assert set(Settings.model_fields["ALLOWED_SIZES"].default) == set(COST_TABLE)
     for size, expected in COST_TABLE.items():
         assert cost(size) == pytest.approx(expected, abs=0.005)
     assert cost(768) / cost(256) == 9
@@ -102,18 +106,31 @@ def test_seconds_per_unit_is_the_median_per_cost_unit(fake_state):
 
 
 def test_wait_estimate_simulates_two_workers(fake_state):
-    # §9.2 with the services faked: 480 s per unit (calibrated, too few done tasks).
+    # §9.2 with the services faked.
     fake_state(
         workers=2,
         running=[task(512, "running", progress=50)],
         queued=[task(512, "queued", created=1), task(768, "queued", created=2)],
     )
-    assert estimate.estimate_wait_seconds() == 480
+    assert estimate.estimate_wait_seconds(spu=SPU) == 480
+
+
+def test_wait_estimate_without_spu_uses_seconds_per_cost_unit(fake_state):
+    fake_state(workers=1, queued=[task(512, "queued")])
+    assert estimate.estimate_wait_seconds() == estimate.seconds_per_cost_unit()
+
+
+def test_tasks_created_at_the_same_moment_queue_in_id_order(fake_state):
+    a, b = task(512, "queued", created=1), task(768, "queued", created=1)
+    first, second = sorted([a, b], key=lambda t: t.id)
+    fake_state(workers=1, queued=[first, second])
+    assert estimate.ready_in_seconds(first, spu=SPU) == cost(first.size) * SPU
+    assert estimate.ready_in_seconds(second, spu=SPU) == (cost(first.size) + cost(second.size)) * SPU
 
 
 def test_no_ready_worker_still_gives_an_estimate(fake_state):
     fake_state(workers=0, queued=[task(512, "queued")])
-    assert estimate.estimate_wait_seconds(spu=480) == 480
+    assert estimate.estimate_wait_seconds(spu=SPU) == 480
 
 
 def test_ready_in_seconds_for_each_status(fake_state):
@@ -121,12 +138,12 @@ def test_ready_in_seconds_for_each_status(fake_state):
     running = task(512, "running", progress=50)
     fake_state(workers=1, running=[running], queued=[first, second])
     # The running job frees the worker at 240 s; the first queued job then runs for 480 s.
-    assert estimate.ready_in_seconds(first, spu=480) == 240 + 480
-    assert estimate.ready_in_seconds(second, spu=480) == 240 + 480 + 1080
-    assert estimate.ready_in_seconds(running, spu=480) == 240
-    assert estimate.ready_in_seconds(task(512, "done"), spu=480) == 0
+    assert estimate.ready_in_seconds(first, spu=SPU) == 240 + 480
+    assert estimate.ready_in_seconds(second, spu=SPU) == 240 + 480 + 1080
+    assert estimate.ready_in_seconds(running, spu=SPU) == 240
+    assert estimate.ready_in_seconds(task(512, "done"), spu=SPU) == 0
 
 
 def test_new_image_waits_for_the_whole_queue(fake_state):
     fake_state(workers=1, running=[task(512, "running", progress=50)], queued=[task(256, "queued")])
-    assert estimate.new_image_ready_in_s(spu=480) == 240 + 120 + 480
+    assert estimate.new_image_ready_in_s(spu=SPU) == 240 + 120 + 480

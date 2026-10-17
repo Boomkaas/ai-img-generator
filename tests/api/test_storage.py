@@ -57,3 +57,11 @@ def test_open_of_a_missing_key_raises_before_streaming(bucket):
 def test_ensure_bucket_is_idempotent(bucket):
     storage.ensure_bucket()
     storage.ensure_bucket()
+
+
+def test_exists_raises_when_the_bucket_itself_is_missing(bucket, monkeypatch):
+    # A misconfigured S3_BUCKET must not look like "image not found".
+    monkeypatch.setenv("S3_BUCKET", f"missing-{uuid4().hex[:8]}")
+    get_settings.cache_clear()
+    with pytest.raises(ClientError):
+        storage.exists("results/anything.png")

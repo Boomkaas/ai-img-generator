@@ -53,22 +53,30 @@ def _remaining_cost(task) -> float:
     return cost(task.size) * (1 - live.progress(task.id) / 100)
 
 
-def estimate_wait_seconds(before: datetime | None = None, spu: float | None = None) -> float:
-    """Seconds until a task submitted at `before` (default: now) would start, on the workers ready now."""
-    spu = seconds_per_cost_unit() if spu is None else spu
+def _wait_behind(queued, spu: float) -> float:
+    """Seconds until a task waiting behind `queued` (oldest first) would start, on the workers ready now."""
     return simulate_wait(
         [_remaining_cost(t) for t in db.running_tasks()],
-        [cost(t.size) for t in db.queued_tasks(created_before=before)],
+        [cost(t.size) for t in queued],
         live.count_workers(("idle", "busy")),
         spu,
     )
+
+
+def estimate_wait_seconds(before: datetime | None = None, spu: float | None = None) -> float:
+    """Seconds until a task submitted at `before` (default: now) would start, on the workers ready now."""
+    spu = seconds_per_cost_unit() if spu is None else spu
+    return _wait_behind(db.queued_tasks(created_before=before), spu)
 
 
 def ready_in_seconds(task, spu: float | None = None) -> float:
     """Seconds until the task's image should be ready; 0 once it has finished."""
     spu = seconds_per_cost_unit() if spu is None else spu
     if task.status == db.QUEUED:
-        return estimate_wait_seconds(before=task.created_at, spu=spu) + cost(task.size) * spu
+        # Ahead of it in the same (created_at, id) order as db.queue_position, so equal times can't disagree.
+        place = (task.created_at, task.id)
+        ahead = [t for t in db.queued_tasks() if (t.created_at, t.id) < place]
+        return _wait_behind(ahead, spu) + cost(task.size) * spu
     if task.status == db.RUNNING:
         return _remaining_cost(task) * spu
     return 0.0

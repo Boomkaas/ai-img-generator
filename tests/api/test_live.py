@@ -110,24 +110,24 @@ def test_clear_task_keys_removes_progress_and_flag(redis_live):
 
 def test_worker_heartbeat_disappears_after_its_expiry(redis_live):
     host = f"nodeB-worker-{uuid4().hex[:6]}"
-    stop = live.start_heartbeat(host, "loading", interval=60, ttl=1)
+    beat = live.start_heartbeat(host, "loading", interval=60, ttl=1)
     try:
         (hb,) = live.worker_heartbeats()
         assert (hb.host, hb.state, hb.task_id, hb.machine) == (host, "loading", None, "nodeB")
         assert hb.rss_mb > 0
         assert wait_until(lambda: not live.worker_heartbeats(), timeout=3)
     finally:
-        stop.set()
+        beat.stop()
 
 
 def test_heartbeat_thread_keeps_rewriting(redis_live):
     host = f"nodeB-worker-{uuid4().hex[:6]}"
-    stop = live.start_heartbeat(host, "idle", interval=0.2, ttl=1)
+    beat = live.start_heartbeat(host, "idle", interval=0.2, ttl=1)
     try:
         time.sleep(1.5)  # past the expiry, so only the thread can have kept it alive
         assert [hb.host for hb in live.worker_heartbeats()] == [host]
     finally:
-        stop.set()
+        beat.stop()
 
 
 def test_count_workers_ignores_loading_ones(redis_live):

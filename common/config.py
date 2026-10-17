@@ -22,12 +22,17 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT_S: float = Field(5, gt=0)  # wait for a free pooled connection before failing
     BROKER_URL: str = "redis://localhost:6379/0"
     REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_CONNECT_TIMEOUT_S: float = Field(5, gt=0)
+    REDIS_SOCKET_TIMEOUT_S: float = Field(5, gt=0)  # sync client only: pub/sub connections sit idle
     S3_ENDPOINT: str = "http://localhost:9000"
     S3_ACCESS_KEY: str = "imagegen"
     S3_SECRET_KEY: str = "imagegen-dev-secret"
     S3_BUCKET: str = "imagegen"
     S3_REGION: str = "us-east-1"  # MinIO ignores it, but request signing needs one
     S3_STREAM_CHUNK_BYTES: int = Field(64 * 1024, ge=1)
+    S3_CONNECT_TIMEOUT_S: float = Field(5, gt=0)
+    S3_READ_TIMEOUT_S: float = Field(30, gt=0)
+    S3_MAX_ATTEMPTS: int = Field(3, ge=1)  # the first try included
 
     # --- Auth ---
     JWT_SECRET: str = Field(min_length=32)  # HMAC key for HS256; at least 256 bits
