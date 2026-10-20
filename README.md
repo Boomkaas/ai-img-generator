@@ -17,26 +17,17 @@ make lint
 make test-unit
 ```
 
-Optional: install [pre-commit](https://pre-commit.com) (`pipx install pre-commit` or `uv tool install pre-commit`)
-and run `pre-commit install` so ruff and gitleaks run before every commit.
-
 If a host port is already taken (for example by a local Postgres), override it:
 `POSTGRES_PORT=5433 make dev-up`, and use the same port in `DATABASE_URL` in `.env`. `REDIS_PORT`,
 `MINIO_PORT` and `MINIO_CONSOLE_PORT` work the same way.
 
 `make help` lists every target.
 
-## Where the design lives
-
-- `docs/architecture.md`: the full design, and the source of truth.
-- `docs/decisions/`: Architecture Decision Records for every deviation from it.
-- `CLAUDE.md`: project conventions in short form.
-
 ## Repository settings
 
 Set these by hand on GitHub (Settings → Branches / General):
 
 - Protect `main` and `develop`: no direct pushes, changes only through pull requests.
-- Require the CI status checks `lint` and `unit` to pass before merging (more jobs are added in later steps).
+- Require the CI status checks `lint` and `unit` to pass before merging.
 - Require at least one approving review.
-- Optional, per the architecture (§11.1): enable "Automatically delete head branches".
+- Optional: enable "Automatically delete head branches".

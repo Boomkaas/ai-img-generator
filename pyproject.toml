@@ -27,7 +27,7 @@ api = [
     "argon2-cffi",
     "pyjwt",
 ]
-# torch and diffusers are installed by the worker image from the PyTorch CPU index (step 12).
+# torch and diffusers are installed by the worker image from the PyTorch CPU index.
 worker = [
     "pillow",
 ]
@@ -52,7 +52,7 @@ packages = ["api", "worker", "controller", "common"]
 [tool.ruff]
 line-length = 110
 target-version = "py312"
-# Python sources only: the code blocks in docs/*.md are sketches, not code to reformat.
+# Python sources only: leave the code blocks in Markdown files alone.
 include = ["*.py", "*.pyi"]
 extend-exclude = ["frontend"]
 

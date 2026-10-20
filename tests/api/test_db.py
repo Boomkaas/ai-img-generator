@@ -42,7 +42,7 @@ def status(task):
     return db.get_task(task.id).status
 
 
-# --- Guarded status changes (§6.1) ---
+# --- Guarded status changes ---
 
 
 def test_claim_succeeds_once():
@@ -132,7 +132,7 @@ def test_fail_queued_only_from_queued():
     assert status(running) == "running"
 
 
-# --- Constraints (§4.3) ---
+# --- Constraints ---
 
 
 def test_size_check_rejects_500():

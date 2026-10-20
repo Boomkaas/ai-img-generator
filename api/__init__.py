@@ -1,1 +1,1 @@
-"""imagegen: FastAPI app (step 04)."""
+"""imagegen: FastAPI app."""

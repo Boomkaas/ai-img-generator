@@ -114,7 +114,7 @@ def client(make_client) -> TestClient:
 
 @pytest.fixture(scope="session")
 def minio():
-    # Community build of MinIO, as in the compose files (ADR 0002).
+    # Community build of MinIO, as in the compose files.
     with MinioContainer(
         "pgsty/minio", access_key="imagegen-test", secret_key="imagegen-test-secret"
     ) as container:

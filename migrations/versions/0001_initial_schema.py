@@ -1,4 +1,4 @@
-"""Initial schema: users, refresh_tokens, tasks (architecture §4.3, verbatim).
+"""Initial schema: users, refresh_tokens, tasks.
 
 Revision ID: 0001
 Revises:

@@ -1,4 +1,4 @@
-"""CLAUDE.md rule: task statuses change only through the guarded functions in common/db.py (§6.1)."""
+"""Task statuses change only through the guarded functions in common/db.py."""
 
 import re
 from pathlib import Path

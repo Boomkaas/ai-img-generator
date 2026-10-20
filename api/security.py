@@ -1,6 +1,6 @@
-"""Passwords, tokens and auth cookies (architecture §4.4).
+"""Passwords, tokens and auth cookies.
 
-The access token is a signed JWT, so any API server can check it on its own (§3.3). The refresh token is a
+The access token is a signed JWT, so any API server can check it on its own. The refresh token is a
 random value; only its SHA-256 hash is stored, so a copy of the database can't be used to sign in.
 """
 
@@ -22,7 +22,7 @@ from common.config import get_settings
 ACCESS_COOKIE = "access_token"
 REFRESH_COOKIE = "refresh_token"
 ACCESS_COOKIE_PATH = "/"
-REFRESH_COOKIE_PATH = "/api/auth"  # both refresh and logout receive it (ADR 0003)
+REFRESH_COOKIE_PATH = "/api/auth"  # both refresh and logout receive it
 JWT_ALGORITHM = "HS256"
 
 # "Looks valid": one @, something on both sides, a dot in the domain, no spaces. Delivery isn't checked.

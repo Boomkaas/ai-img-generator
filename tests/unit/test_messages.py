@@ -10,7 +10,7 @@ from common import messages as m
 
 pytestmark = pytest.mark.unit
 
-DOC = Path(__file__).resolve().parents[2] / "docs" / "messages.md"
+DOC = Path(__file__).resolve().parents[2] / "common" / "messages.md"
 NOW = datetime(2026, 10, 17, 9, 12, tzinfo=UTC)
 TASK_ID = uuid4()
 
@@ -105,7 +105,7 @@ def test_unknown_type_is_rejected():
 
 
 def doc_examples() -> list[tuple[str, dict]]:
-    """(model name from the heading, parsed JSON) for every ```json block in docs/messages.md."""
+    """(model name from the heading, parsed JSON) for every ```json block in common/messages.md."""
     examples, model = [], None
     for heading, block in re.findall(r"^## (\w+)[^\n]*|```json\n(.*?)```", DOC.read_text(), re.M | re.S):
         if heading:

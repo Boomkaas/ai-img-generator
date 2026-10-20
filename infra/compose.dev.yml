@@ -33,7 +33,7 @@ services:
       retries: 10
 
   minio:
-    image: pgsty/minio  # community build: upstream stopped publishing images (ADR 0002)
+    image: pgsty/minio  # community build: upstream stopped publishing images
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: imagegen

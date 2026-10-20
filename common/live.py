@@ -1,4 +1,4 @@
-"""Live state in Redis: progress, cancel flags, heartbeats, controller state and pub/sub (§3.2, §4.2, §4.8).
+"""Live state in Redis: progress, cancel flags, heartbeats, controller state and pub/sub.
 
 This is the only module that names Redis keys and channels. Nothing here is the source of truth for a task:
 Postgres is. Everything in Redis either expires or is rewritten every few seconds, so losing it costs at most
@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 SYSTEM_CHANNEL = "system"
 ADMIN_CHANNEL = "admin"
-USER_CHANNEL_PATTERN = "user:*"  # each API process subscribes to this once (§3.2)
+USER_CHANNEL_PATTERN = "user:*"  # each API process subscribes to this once
 AUTOSCALER_KEY = "controller:autoscaler"
 ALERTS_KEY = "controller:alerts"
 _WORKER_PREFIX = "hb:worker:"
@@ -84,7 +84,7 @@ def reset_client() -> None:
 
 
 def async_client() -> redis.asyncio.Redis:
-    """A new asyncio client; the caller owns it and closes it (the WebSocket fan-out, step 07).
+    """A new asyncio client; the caller owns it and closes it (the WebSocket fan-out).
 
     Only connecting is bounded: a pub/sub subscription can rightly wait minutes for its next message.
     """
@@ -95,7 +95,7 @@ def async_client() -> redis.asyncio.Redis:
 
 
 def redis_run_id() -> str:
-    """Changes whenever Redis restarts, which tells the sweeper queued messages may be lost (§6.5)."""
+    """Changes whenever Redis restarts, which tells the sweeper queued messages may be lost."""
     return client().info("server")["run_id"]
 
 
@@ -134,7 +134,7 @@ def publish_task_final(user_id, task_id, status: FinishedStatus) -> None:
     publish(user_channel(user_id), TaskFinal(id=task_id, status=status))
 
 
-# --- Cancellation (§6.3) ------------------------------------------------------------------------------------
+# --- Cancellation -------------------------------------------------------------------------------------------
 
 
 def request_cancel(task_id, ttl: int | None = None) -> None:
@@ -149,7 +149,7 @@ def clear_task_keys(task_id) -> None:
     client().delete(progress_key(task_id), cancel_key(task_id))
 
 
-# --- Heartbeats (§4.8) --------------------------------------------------------------------------------------
+# --- Heartbeats ---------------------------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -355,7 +355,7 @@ def machine_heartbeats() -> list[MachineHeartbeat]:
     ]
 
 
-# --- Controller state (§4.7) --------------------------------------------------------------------------------
+# --- Controller state ---------------------------------------------------------------------------------------
 
 _AUTOSCALER_INTS = ("desired", "ready", "starting", "maximum")
 

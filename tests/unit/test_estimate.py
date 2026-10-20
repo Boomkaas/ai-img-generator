@@ -15,12 +15,12 @@ SPU = (
     480  # seconds per cost unit in these tests, passed explicitly so a calibrated value in .env can't leak in
 )
 
-# §1.3: cost relative to a 512 px job, as printed (rounded to two places).
+# Cost relative to a 512 px job, rounded to two places.
 COST_TABLE = {256: 0.25, 384: 0.56, 512: 1.0, 640: 1.56, 768: 2.25}
 
 
-def test_wait_example_from_the_architecture():
-    # §9.2: one worker halfway through a 512 px job, one idle; a 512 px and a 768 px job waiting.
+def test_wait_example():
+    # One worker halfway through a 512 px job, one idle; a 512 px and a 768 px job waiting.
     assert simulate_wait([0.5], [1.0, 2.25], 2, 480) == 480
 
 
@@ -106,7 +106,7 @@ def test_seconds_per_unit_is_the_median_per_cost_unit(fake_state):
 
 
 def test_wait_estimate_simulates_two_workers(fake_state):
-    # §9.2 with the services faked.
+    # The same example, with the services faked.
     fake_state(
         workers=2,
         running=[task(512, "running", progress=50)],

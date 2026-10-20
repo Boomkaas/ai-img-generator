@@ -1,6 +1,6 @@
-"""The FastAPI application (architecture §2, §3).
+"""The FastAPI application.
 
-Each API process is stateless (§3.3): the engine, the Redis client and the request counter are per-process
+Each API process is stateless: the engine, the Redis client and the request counter are per-process
 resources, and everything shared lives in Postgres and Redis. Run with `make run-api`.
 """
 

@@ -1,4 +1,4 @@
-"""Register, sign in, refresh, log out and the current user (architecture §3.1, §4.4)."""
+"""Register, sign in, refresh, log out and the current user."""
 
 import logging
 from datetime import UTC, datetime

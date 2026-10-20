@@ -1,4 +1,4 @@
-"""Request dependencies: who is calling, whether they may, and what they may send (architecture §4.4)."""
+"""Request dependencies: who is calling, whether they may, and what they may send."""
 
 from typing import Annotated
 
@@ -39,7 +39,7 @@ def require_admin(user: CurrentUser) -> Row:
 
 
 def check_origin(origin: str | None) -> bool:
-    """True if a WebSocket handshake comes from one of our own pages (§3.2)."""
+    """True if a WebSocket handshake comes from one of our own pages."""
     return origin is not None and origin in get_settings().ALLOWED_ORIGINS
 
 

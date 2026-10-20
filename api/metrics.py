@@ -1,4 +1,4 @@
-"""Requests per minute for the API heartbeat (architecture §4.8)."""
+"""Requests per minute for the API heartbeat."""
 
 import threading
 import time

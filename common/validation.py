@@ -1,4 +1,4 @@
-"""Server-side validation of a submitted job (architecture §4.1).
+"""Server-side validation of a submitted job.
 
 Kept free of FastAPI so the worker and controller can import it; the API turns `ValidationProblem` into 422.
 """

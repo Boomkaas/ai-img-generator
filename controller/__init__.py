@@ -1,1 +1,1 @@
-"""imagegen: controller loop, status, sweeper, autoscaler (steps 08-09)."""
+"""imagegen: controller loop, status, sweeper, autoscaler."""

@@ -1,4 +1,4 @@
-"""Image storage in MinIO through boto3 (architecture §2, §3.1).
+"""Image storage in MinIO through boto3.
 
 Images are never exposed by URL: the API streams them from here with `open`, so MinIO stays private.
 """

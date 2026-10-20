@@ -1,8 +1,8 @@
-"""One schema for every message the server sends (architecture §3.2, §4.8).
+"""One schema for every message the server sends.
 
-The API, the controller and the workers build these models; `docs/messages.md` shows one example of each,
-and the frontend's TypeScript types are written from it. `type` is the discriminator, so a raw message from
-pub/sub or a WebSocket parses back with `parse_message`.
+The API, the controller and the workers build these models; `messages.md` next to this file shows one
+example of each, and the frontend's TypeScript types are written from it. `type` is the discriminator,
+so a raw message from pub/sub or a WebSocket parses back with `parse_message`.
 """
 
 import uuid
@@ -75,7 +75,7 @@ class Snapshot(BaseModel):
     task: TaskOut | None = None
 
 
-# --- Admin overview (§4.8) ----------------------------------------------------------------------------------
+# --- Admin overview -----------------------------------------------------------------------------------------
 
 
 class ApiStats(BaseModel):

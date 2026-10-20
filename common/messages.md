@@ -1,7 +1,7 @@
 # Messages
 
 Every message the server sends, one example each. The models live in `common/messages.py`; the frontend's
-TypeScript types (steps 10–11) are written from this page. `tests/unit/test_messages.py` parses every example
+TypeScript types are written from this page. `tests/unit/test_messages.py` parses every example
 below, so this page can't drift from the models.
 
 WebSocket and pub/sub messages carry a `type` that says which one they are. Ids are UUID strings, times are
@@ -9,7 +9,7 @@ ISO 8601 in UTC, durations are seconds, progress is a whole percentage (0–100)
 
 ## SystemStatus — `system`
 
-Every 5 s, to every socket (§6.2).
+Every 5 s, to every socket.
 
 ```json
 {"type": "system", "running": 4, "waiting": 3, "new_image_ready_in_s": 840.0}
@@ -67,7 +67,7 @@ returns it (`TaskOut`, below), or `null` when there is none.
 
 ## AdminOverview — `admin`
 
-Every 5 s, to admin sockets only; `GET /api/admin/overview` returns the same object (§4.8). `api` is `null` on
+Every 5 s, to admin sockets only; `GET /api/admin/overview` returns the same object. `api` is `null` on
 machines without an API server. A worker's `task_id` and `progress` are `null` while it isn't busy; a task has
 a `progress` while running and a `position` while queued.
 

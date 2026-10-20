@@ -1,4 +1,4 @@
-"""Postgres access with SQLAlchemy 2 Core (architecture §4.3, §6.1).
+"""Postgres access with SQLAlchemy 2 Core.
 
 The functions under "Status changes" are the only code allowed to change `tasks.status`. Each one is a
 single guarded UPDATE ... RETURNING, so when two parties race (a cancel and the last step, the sweeper and a
@@ -39,7 +39,7 @@ from common.config import get_settings
 QUEUED, RUNNING, DONE, FAILED, CANCELLED = "queued", "running", "done", "failed", "cancelled"
 ACTIVE_STATUSES = (QUEUED, RUNNING)
 FINISHED_STATUSES = (DONE, FAILED, CANCELLED)
-SUBMIT_LOCK_ID = 1  # pg_advisory_xact_lock key that serialises every submit (§4.3)
+SUBMIT_LOCK_ID = 1  # pg_advisory_xact_lock key that serialises every submit
 
 # --- Tables: mirror migrations/versions/0001_initial_schema.py --------------------------------------------
 
@@ -108,7 +108,7 @@ def normalise_url(url: str) -> str:
 @lru_cache
 def get_engine() -> Engine:
     settings = get_settings()
-    # No overflow: DB_POOL_SIZE is the hard per-process connection count used in the sizing (§7.2).
+    # No overflow: DB_POOL_SIZE is the hard per-process connection count used in the sizing.
     return create_engine(
         normalise_url(settings.DATABASE_URL),
         pool_size=settings.DB_POOL_SIZE,
@@ -228,7 +228,7 @@ def revoke_all_refresh_tokens(user_id) -> int:
     return len(_all(stmt))
 
 
-# --- Submit helpers: run inside one transaction() together (§4.3) -------------------------------------------
+# --- Submit helpers: run inside one transaction() together --------------------------------------------------
 
 
 def advisory_lock(tx: Connection) -> None:
@@ -356,7 +356,7 @@ def tasks_beyond_history_limit(limit: int) -> Sequence[Row]:
     return _all(stmt)
 
 
-# --- Status changes: the only places tasks.status may change (§6.1) -----------------------------------------
+# --- Status changes: the only places tasks.status may change ------------------------------------------------
 
 
 def claim_task(task_id, worker_host: str) -> bool:

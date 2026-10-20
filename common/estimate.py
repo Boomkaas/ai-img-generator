@@ -1,4 +1,4 @@
-"""Wait-time estimates (architecture §4.6).
+"""Wait-time estimates.
 
 `simulate_wait` is the pure core; the functions below it gather the state from Postgres and Redis. Jobs differ
 in cost, so the estimate simulates the queue on the ready workers instead of multiplying a position by an

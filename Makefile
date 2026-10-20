@@ -49,13 +49,13 @@ test-api:  ## API tests (Postgres, Redis, MinIO via testcontainers; needs Docker
 	$(BIN)/pytest -m api
 
 test-integration:  ## Worker integration tests (compose test stack)
-	@echo "test-integration: added in step 13"
+	@echo "test-integration: not implemented yet"
 
 test-lb:  ## Load-balancer tests (compose test stack with Nginx)
-	@echo "test-lb: added in step 13"
+	@echo "test-lb: not implemented yet"
 
 test-e2e:  ## Playwright end-to-end tests
-	@echo "test-e2e: added in step 13"
+	@echo "test-e2e: not implemented yet"
 
 # --- Run --------------------------------------------------------------------
 
@@ -63,7 +63,7 @@ run-api:  ## Run the API server locally
 	$(BIN)/uvicorn api.main:app --reload --port 8000
 
 run-worker:  ## Run one worker locally
-	@echo "run-worker: added in step 06"
+	@echo "run-worker: not implemented yet"
 
 run-controller:  ## Run the controller locally
-	@echo "run-controller: added in step 08"
+	@echo "run-controller: not implemented yet"

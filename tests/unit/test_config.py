@@ -43,7 +43,7 @@ def test_one_derived_timeout_can_be_overridden_by_env(monkeypatch):
 
 
 def test_short_test_timeouts_are_accepted(monkeypatch):
-    # The shape the integration tests use (step 13): everything shortened, order kept.
+    # The shape the integration tests use: everything shortened, order kept.
     short = {"MEASURED_MAX_RUNTIME_S": "2", "TASK_SOFT_TIME_LIMIT": "3", "TASK_TIME_LIMIT": "10"}
     for name, value in short.items():
         monkeypatch.setenv(name, value)
@@ -97,7 +97,7 @@ def test_list_settings_parse_from_env(monkeypatch):
     assert s.ALLOWED_SIZES == (256, 512)
 
 
-def test_defaults_match_the_architecture():
+def test_default_values():
     s = make()
     assert s.ALLOWED_SIZES == (256, 384, 512, 640, 768)
     assert (s.NUM_STEPS, s.MAX_PROMPT_LEN, s.MAX_ACTIVE_TASKS_PER_USER) == (25, 500, 1)

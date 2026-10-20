@@ -32,16 +32,8 @@ reports/
 node_modules/
 frontend/dist/
 
-# Local review artifacts
-.claude/reviews/
-
 # Editors / OS
 .idea/
 .vscode/
 *.swp
 .DS_Store
-
-# Local-only tooling, never committed
-CLAUDE.md
-.pre-commit-config.yaml
-scripts/check_commit_msg.py

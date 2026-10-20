@@ -1,1 +1,1 @@
-"""HTTP routers, one module per area of architecture §3.1."""
+"""HTTP routers, one module per area of the API."""
