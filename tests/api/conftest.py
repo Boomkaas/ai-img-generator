@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import text
 from testcontainers.minio import MinioContainer
 from testcontainers.postgres import PostgresContainer
@@ -72,6 +73,43 @@ def redis_live(redis_url, monkeypatch):
     yield live.client()
     live.reset_client()
     get_settings.cache_clear()
+
+
+def _no_password_hash(response) -> None:
+    response.read()
+    assert b"password_hash" not in response.content
+    assert b"$argon2" not in response.content
+
+
+@pytest.fixture
+def make_client(migrated_db, redis_live, monkeypatch):
+    """Builds clients, each on its own create_app() instance sharing the test database, Redis and secret.
+
+    Cookies aren't Secure here (COOKIE_SECURE=false), because the test client talks plain HTTP and would drop
+    them. Every response any client receives is checked for password hashes.
+    """
+    from api.main import create_app
+
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    get_settings.cache_clear()
+    clients = []
+
+    def make(app=None) -> TestClient:
+        client = TestClient(app or create_app())
+        client.event_hooks["response"] = [_no_password_hash]
+        client.__enter__()  # runs the lifespan
+        clients.append(client)
+        return client
+
+    yield make
+    for client in clients:
+        client.__exit__(None, None, None)
+    get_settings.cache_clear()
+
+
+@pytest.fixture
+def client(make_client) -> TestClient:
+    return make_client()
 
 
 @pytest.fixture(scope="session")

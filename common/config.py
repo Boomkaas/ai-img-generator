@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     JWT_SECRET: str = Field(min_length=32)  # HMAC key for HS256; at least 256 bits
     COOKIE_SECURE: bool = True
     ALLOWED_ORIGINS: Annotated[tuple[str, ...], NoDecode] = ("https://localhost",)
+    ACCESS_TOKEN_TTL_S: int = Field(15 * 60, gt=0)
+    REFRESH_TOKEN_TTL_S: int = Field(7 * 24 * 3600, gt=0)
+    MIN_PASSWORD_LEN: int = Field(8, ge=1)
+    MAX_EMAIL_LEN: int = Field(254, ge=3)  # the longest address SMTP allows
+
+    # --- API process ---
+    REQUEST_RATE_WINDOW_S: int = Field(60, gt=0)  # the rolling window behind requests_per_min (§4.8)
 
     # --- Worker ---
     MACHINE_NAME: str = Field(default_factory=socket.gethostname)

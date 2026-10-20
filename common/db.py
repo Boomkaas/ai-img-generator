@@ -174,6 +174,16 @@ def get_user_by_email(email: str) -> Row | None:
     return _one(select(users).where(func.lower(users.c.email) == func.lower(email)))
 
 
+def set_password_hash(user_id, password_hash: str) -> bool:
+    stmt = (
+        update(users)
+        .where(users.c.id == _uuid(user_id))
+        .values(password_hash=password_hash)
+        .returning(users.c.id)
+    )
+    return _one(stmt) is not None
+
+
 def set_role(user_id, role: str) -> bool:
     stmt = update(users).where(users.c.id == _uuid(user_id)).values(role=role).returning(users.c.id)
     return _one(stmt) is not None

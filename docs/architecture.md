@@ -437,7 +437,7 @@ The history endpoint pages through `tasks_user_history`, newest first. Cancellin
 
 - **Passwords** are hashed with argon2 and never logged.
 - **Access token:** a JWT valid for 15 minutes, in an `HttpOnly; Secure; SameSite=Strict` cookie. Any API server can verify it with the shared signing key (§3.3), and the WebSocket handshake carries it automatically.
-- **Refresh token:** a random value valid for 7 days, in an `HttpOnly; Secure; SameSite=Strict` cookie limited to the path `/api/auth/refresh`. Only its hash is stored in `refresh_tokens`. Each refresh replaces it with a new one and logout revokes it, so a session can really be ended.
+- **Refresh token:** a random value valid for 7 days, in an `HttpOnly; Secure; SameSite=Strict` cookie limited to the path `/api/auth`, so both refresh and logout receive it (ADR 0003). Only its hash is stored in `refresh_tokens`. Each refresh replaces it with a new one and logout revokes it, so a session can really be ended.
 - **Requests from other sites:** `SameSite=Strict` keeps the cookies off requests that another site starts, and the WebSocket handshake also checks `Origin`.
 - **Admin role:** admin endpoints and the `admin` WebSocket channel check `users.role = 'admin'`, not just a valid token.
 - **Login rate limit** is enforced in Nginx (§4.5), not in the API servers. A limit kept in each API server's memory would be multiplied by the number of servers.
