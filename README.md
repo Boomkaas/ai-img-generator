@@ -23,6 +23,28 @@ If a host port is already taken (for example by a local Postgres), override it:
 
 `make help` lists every target.
 
+## Running the real model locally
+
+`make run-worker` uses the fake pipeline, which sleeps instead of computing. To generate real images, install
+the CPU build of PyTorch and the Stable Diffusion libraries into the same environment:
+
+```bash
+.venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
+.venv/bin/pip install diffusers transformers accelerate safetensors
+```
+
+Download a Stable Diffusion 1.5 checkpoint in `diffusers` format (for example
+`stable-diffusion-v1-5/stable-diffusion-v1-5` from Hugging Face) into a directory, point `MODEL_DIR` at it,
+and start the worker with `PIPELINE=real`:
+
+```bash
+.venv/bin/huggingface-cli download stable-diffusion-v1-5/stable-diffusion-v1-5 --local-dir ./models/sd15
+MODEL_DIR=./models/sd15 PIPELINE=real .venv/bin/celery -A worker.app:celery_app worker \
+    --pool=prefork --concurrency=1 -Q image_generation --loglevel=info
+```
+
+Loading takes 20–60 s, and one 512 px image takes several minutes with `WORKER_THREADS=2`.
+
 ## Repository settings
 
 Set these by hand on GitHub (Settings → Branches / General):
