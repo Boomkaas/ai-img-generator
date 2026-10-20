@@ -115,6 +115,8 @@ def get_engine() -> Engine:
         max_overflow=0,
         pool_timeout=settings.DB_POOL_TIMEOUT_S,
         pool_pre_ping=True,
+        # Without it libpq waits for the OS TCP timeout (minutes) when the database host stops answering.
+        connect_args={"connect_timeout": settings.DB_CONNECT_TIMEOUT_S},
     )
 
 

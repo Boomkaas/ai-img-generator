@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+psycopg://imagegen:imagegen@localhost:5432/imagegen"
     DB_POOL_SIZE: int = Field(5, ge=1)
     DB_POOL_TIMEOUT_S: float = Field(5, gt=0)  # wait for a free pooled connection before failing
+    DB_CONNECT_TIMEOUT_S: int = Field(5, ge=2)  # libpq counts whole seconds and treats less than 2 as 2
     BROKER_URL: str = "redis://localhost:6379/0"
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_CONNECT_TIMEOUT_S: float = Field(5, gt=0)
