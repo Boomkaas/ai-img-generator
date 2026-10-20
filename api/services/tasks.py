@@ -46,7 +46,9 @@ def submit(user: Row, body: SubmitBody, idempotency_key: uuid.UUID) -> TaskOut:
     except ValidationProblem as problem:
         raise HTTPException(422, problem.message) from None
     task, created = _reserve(user.id, prompt, body.size, idempotency_key)
-    if created:
+    # A retry may come from a client whose first request died between the commit and the enqueue, so a
+    # task that is still queued is sent again. The worker's claim drops whichever copy arrives second.
+    if created or task.status == db.QUEUED:
         _enqueue(task)
     return task_out(task)
 
@@ -59,7 +61,7 @@ def _reserve(user_id, prompt: str, size: int, idempotency_key: uuid.UUID) -> tup
         db.advisory_lock(tx)
         existing = db.find_by_idempotency_key(tx, user_id, idempotency_key)
         if existing is not None:
-            return existing, False  # a retried request: the same task, no duplicate
+            return existing, False  # a retried request: the same task, no second row
         if db.count_active_for_user(tx, user_id) >= settings.MAX_ACTIVE_TASKS_PER_USER:
             raise HTTPException(429, "You already have an image in progress")
         if db.count_queued(tx) < settings.MAX_QUEUED_TOTAL:

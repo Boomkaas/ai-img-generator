@@ -16,7 +16,18 @@ GENERATE_TASK = "worker.tasks.generate_image"
 
 @lru_cache
 def app() -> Celery:
-    return Celery("imagegen", broker=get_settings().BROKER_URL)
+    settings = get_settings()
+    celery = Celery("imagegen", broker=settings.BROKER_URL)
+    # kombu's Redis transport has no socket timeouts by default, so a broker host that stops answering
+    # would hold a submit or cancel request for the OS TCP timeout on every retry.
+    celery.conf.update(
+        broker_transport_options={
+            "socket_connect_timeout": settings.REDIS_CONNECT_TIMEOUT_S,
+            "socket_timeout": settings.REDIS_SOCKET_TIMEOUT_S,
+        },
+        task_publish_retry_policy={"max_retries": settings.BROKER_PUBLISH_MAX_RETRIES},
+    )
+    return celery
 
 
 def reset_app() -> None:

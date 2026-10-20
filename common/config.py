@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT_S: float = Field(5, gt=0)  # wait for a free pooled connection before failing
     DB_CONNECT_TIMEOUT_S: int = Field(5, ge=2)  # libpq counts whole seconds and treats less than 2 as 2
     BROKER_URL: str = "redis://localhost:6379/0"
+    BROKER_PUBLISH_MAX_RETRIES: int = Field(1, ge=0)  # each try may wait REDIS_CONNECT_TIMEOUT_S
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_CONNECT_TIMEOUT_S: float = Field(5, gt=0)
     REDIS_SOCKET_TIMEOUT_S: float = Field(5, gt=0)  # sync client only: pub/sub connections sit idle

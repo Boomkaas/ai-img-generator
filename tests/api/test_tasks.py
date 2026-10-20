@@ -165,6 +165,29 @@ def test_the_same_idempotency_key_returns_the_same_task(user, celery):
     assert first.status_code == second.status_code == 202
     assert first.json()["task_id"] == second.json()["task_id"]
     assert len(tasks_of(user_id_of(user))) == 1
+    # Still queued, so the retry sends it again; both messages carry the one task id.
+    assert [sent.id for sent in celery.sent] == [UUID(first.json()["task_id"])] * 2
+
+
+def test_a_retry_enqueues_a_task_whose_first_request_died_before_enqueueing(user, celery):
+    key = uuid4()
+    with db.transaction() as tx:  # committed, but the API process died before send_generate
+        lost = db.insert_task(tx, user_id_of(user), "a cat", 256, key)
+
+    response = submit(user, key=key)
+    assert response.status_code == 202
+    assert response.json()["task_id"] == str(lost.id)
+    assert [sent.id for sent in celery.sent] == [lost.id]
+
+
+def test_a_retry_of_a_finished_task_is_not_enqueued_again(user, celery):
+    key = uuid4()
+    task_id = submit(user, key=key).json()["task_id"]
+    user.delete(f"/api/tasks/{task_id}")
+
+    response = submit(user, key=key)
+    assert response.status_code == 202
+    assert response.json()["status"] == "cancelled"
     assert len(celery.sent) == 1
 
 
