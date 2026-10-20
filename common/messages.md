@@ -120,3 +120,31 @@ Fields that don't apply to the task's status are `null`.
   "error_message": null
 }
 ```
+
+## TaskPage (HTTP)
+
+What `GET /api/tasks?before=<time>&limit=<n>` returns: the user's tasks, newest first, each a `TaskOut`.
+`next_before` goes back as `before` to fetch the next page; it is `null` on the last page.
+
+```json
+{
+  "items": [
+    {
+      "task_id": "3f2b8c1e-7d4a-4e5b-9a6c-1d2e3f4a5b6c",
+      "status": "done",
+      "prompt": "a lighthouse at dusk, oil painting",
+      "size": 512,
+      "created_at": "2026-10-17T09:12:03Z",
+      "started_at": "2026-10-17T09:12:05Z",
+      "finished_at": "2026-10-17T09:20:11Z",
+      "position": null,
+      "queue_length": null,
+      "progress": null,
+      "stage": null,
+      "ready_in_s": null,
+      "error_message": null
+    }
+  ],
+  "next_before": "2026-10-17T09:12:03Z"
+}
+```

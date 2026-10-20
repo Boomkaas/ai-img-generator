@@ -117,7 +117,15 @@ def doc_examples() -> list[tuple[str, dict]]:
 
 def test_docs_have_one_example_per_message_type():
     documented = {name for name, _ in doc_examples()}
-    assert documented == {"SystemStatus", "TaskUpdate", "TaskFinal", "Snapshot", "AdminOverview", "TaskOut"}
+    assert documented == {
+        "SystemStatus",
+        "TaskUpdate",
+        "TaskFinal",
+        "Snapshot",
+        "AdminOverview",
+        "TaskOut",
+        "TaskPage",
+    }
 
 
 @pytest.mark.parametrize(
@@ -126,7 +134,7 @@ def test_docs_have_one_example_per_message_type():
 def test_doc_example_matches_its_model(name, example):
     model = getattr(m, name)
     parsed = model.model_validate(example)
-    if name != "TaskOut":
+    if name not in ("TaskOut", "TaskPage"):
         assert type(m.parse_message(json.dumps(example))) is model
     # The doc shows exactly the fields the server sends.
     assert json.loads(parsed.model_dump_json()).keys() == example.keys()

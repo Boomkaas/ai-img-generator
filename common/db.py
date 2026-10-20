@@ -280,6 +280,17 @@ def get_task(task_id, user_id=None) -> Row | None:
     return _one(stmt)
 
 
+def get_active_task(user_id) -> Row | None:
+    """The user's queued or running task; the newest if a raised cap allows several."""
+    stmt = (
+        select(tasks)
+        .where(tasks.c.user_id == _uuid(user_id), tasks.c.status.in_(ACTIVE_STATUSES))
+        .order_by(tasks.c.created_at.desc(), tasks.c.id.desc())
+        .limit(1)
+    )
+    return _one(stmt)
+
+
 def count_tasks(status: str) -> int:
     return _scalar(select(func.count()).select_from(tasks).where(tasks.c.status == status))
 
