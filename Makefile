@@ -62,8 +62,9 @@ test-e2e:  ## Playwright end-to-end tests
 run-api:  ## Run the API server locally
 	$(BIN)/uvicorn api.main:app --reload --port 8000
 
-run-worker:  ## Run one worker locally
-	@echo "run-worker: not implemented yet"
+run-worker:  ## Run one worker locally with the fake pipeline
+	PIPELINE=fake FAKE_STEP_SECONDS=1 $(BIN)/celery -A worker.app:celery_app worker \
+		--pool=prefork --concurrency=1 -Q image_generation --loglevel=info
 
 run-controller:  ## Run the controller locally
 	@echo "run-controller: not implemented yet"

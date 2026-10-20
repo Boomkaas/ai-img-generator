@@ -37,3 +37,6 @@ frontend/dist/
 .vscode/
 *.swp
 .DS_Store
+
+# Local model weights for PIPELINE=real
+models/

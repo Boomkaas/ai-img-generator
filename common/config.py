@@ -53,6 +53,7 @@ class Settings(BaseSettings):
 
     # --- Worker ---
     MACHINE_NAME: str = Field(default_factory=socket.gethostname)
+    WORKER_NAME: str = Field(default_factory=socket.gethostname)  # "<machine>-worker-<slot>" under Swarm
     PIPELINE: Literal["real", "fake"] = "real"
     FAKE_STEP_SECONDS: float = Field(1.0, ge=0)
     MODEL_DIR: str = "/models/sd15"
