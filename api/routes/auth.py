@@ -1,8 +1,8 @@
 """Register, sign in, refresh, log out and the current user (architecture §3.1, §4.4)."""
 
 import logging
-import re
 from datetime import UTC, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Cookie, HTTPException, Response
 from pydantic import BaseModel
@@ -17,8 +17,7 @@ from common.config import get_settings
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-# "Looks valid": one @, something on both sides, a dot in the domain, no spaces. Delivery isn't checked.
-EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+RefreshCookie = Annotated[str | None, Cookie(alias=security.REFRESH_COOKIE)]
 
 
 class Credentials(BaseModel):
@@ -47,8 +46,8 @@ def _sign_in(response: Response, user: Row) -> PublicUser:
 @router.post("/register", status_code=201, response_model=PublicUser)
 def register(body: Credentials, response: Response) -> PublicUser:
     settings = get_settings()
-    email = body.email.strip().lower()
-    if len(email) > settings.MAX_EMAIL_LEN or not EMAIL_PATTERN.match(email):
+    email = security.normalise_email(body.email)
+    if not security.email_looks_valid(email):
         raise HTTPException(422, "Enter a valid email address, like name@example.com")
     if len(body.password) < settings.MIN_PASSWORD_LEN:
         raise HTTPException(422, f"Choose a password of at least {settings.MIN_PASSWORD_LEN} characters")
@@ -61,7 +60,7 @@ def register(body: Credentials, response: Response) -> PublicUser:
 
 @router.post("/login", response_model=PublicUser)
 def login(body: Credentials, response: Response) -> PublicUser:
-    user = db.get_user_by_email(body.email.strip())
+    user = db.get_user_by_email(security.normalise_email(body.email))
     # The same message, and the same argon2 work, for an unknown email and a wrong password.
     if not security.verify_password(user.password_hash if user else None, body.password):
         raise HTTPException(401, "Email or password is incorrect")
@@ -71,7 +70,7 @@ def login(body: Credentials, response: Response) -> PublicUser:
 
 
 @router.post("/refresh", response_model=PublicUser)
-def refresh(response: Response, refresh_token: str | None = Cookie(None)) -> PublicUser:
+def refresh(response: Response, refresh_token: RefreshCookie = None) -> PublicUser:
     if not refresh_token:
         raise HTTPException(401, SIGN_IN_AGAIN)
     token_hash = security.hash_refresh_token(refresh_token)
@@ -91,7 +90,7 @@ def refresh(response: Response, refresh_token: str | None = Cookie(None)) -> Pub
 
 
 @router.post("/logout", status_code=204)
-def logout(refresh_token: str | None = Cookie(None)) -> Response:
+def logout(refresh_token: RefreshCookie = None) -> Response:
     if refresh_token:
         db.revoke_refresh_token(security.hash_refresh_token(refresh_token))
     response = Response(status_code=204)

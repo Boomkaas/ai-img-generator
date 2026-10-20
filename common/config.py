@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+psycopg://imagegen:imagegen@localhost:5432/imagegen"
     DB_POOL_SIZE: int = Field(5, ge=1)
     DB_POOL_TIMEOUT_S: float = Field(5, gt=0)  # wait for a free pooled connection before failing
+    DB_CONNECT_TIMEOUT_S: int = Field(5, ge=2)  # libpq counts whole seconds and treats less than 2 as 2
     BROKER_URL: str = "redis://localhost:6379/0"
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_CONNECT_TIMEOUT_S: float = Field(5, gt=0)
@@ -42,6 +43,8 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_TTL_S: int = Field(7 * 24 * 3600, gt=0)
     MIN_PASSWORD_LEN: int = Field(8, ge=1)
     MAX_EMAIL_LEN: int = Field(254, ge=3)  # the longest address SMTP allows
+    # Each argon2 hash takes 64 MiB, so this bounds an API process's hashing memory however many sign in.
+    MAX_CONCURRENT_PASSWORD_HASHES: int = Field(4, ge=1)
 
     # --- API process ---
     REQUEST_RATE_WINDOW_S: int = Field(60, gt=0)  # the rolling window behind requests_per_min (§4.8)

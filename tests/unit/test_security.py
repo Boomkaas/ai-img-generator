@@ -1,4 +1,7 @@
 import hashlib
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -18,8 +21,10 @@ pytestmark = pytest.mark.unit
 def fresh_settings(monkeypatch):
     monkeypatch.setenv("ALLOWED_ORIGINS", "https://imagegen.example,http://localhost:5173")
     get_settings.cache_clear()
+    security._hash_slots.cache_clear()
     yield
     get_settings.cache_clear()
+    security._hash_slots.cache_clear()
 
 
 def test_password_round_trip():
@@ -33,6 +38,55 @@ def test_password_round_trip():
 def test_verify_password_without_a_hash_or_with_a_broken_one_is_false():
     assert not security.verify_password(None, "anything")
     assert not security.verify_password("not-an-argon2-hash", "anything")
+
+
+def test_no_more_password_hashes_run_at_once_than_configured(monkeypatch):
+    monkeypatch.setenv("MAX_CONCURRENT_PASSWORD_HASHES", "2")
+    get_settings.cache_clear()
+    running, peak, lock = 0, 0, threading.Lock()
+
+    class SlowHasher:
+        def _work(self):
+            nonlocal running, peak
+            with lock:
+                running += 1
+                peak = max(peak, running)
+            time.sleep(0.05)
+            with lock:
+                running -= 1
+
+        def hash(self, password):
+            self._work()
+            return "hash"
+
+        def verify(self, password_hash, password):
+            self._work()
+            return True
+
+    monkeypatch.setattr(security, "_hasher", SlowHasher())
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(security.hash_password, ["pw"] * 4))
+        list(pool.map(security.verify_password, ["hash"] * 4, ["pw"] * 4))
+    assert peak == 2
+
+
+@pytest.mark.parametrize(
+    "email, ok",
+    [
+        ("name@example.com", True),
+        ("not-an-email", False),
+        ("a@b", False),
+        ("two words@example.com", False),
+        ("a@@example.com", False),
+        ("x" * 250 + "@example.com", False),  # longer than MAX_EMAIL_LEN
+    ],
+)
+def test_email_looks_valid(email, ok):
+    assert security.email_looks_valid(email) is ok
+
+
+def test_normalise_email():
+    assert security.normalise_email("  Ann@Example.COM ") == "ann@example.com"
 
 
 def test_access_token_carries_the_claims_and_lasts_fifteen_minutes():

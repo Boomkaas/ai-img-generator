@@ -9,8 +9,7 @@ import argparse
 import getpass
 import sys
 
-from api.routes.auth import EMAIL_PATTERN
-from api.security import hash_password
+from api.security import email_looks_valid, hash_password, normalise_email
 from common import db
 from common.config import get_settings
 
@@ -30,8 +29,8 @@ def ask_password() -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("email")
-    email = parser.parse_args(argv).email.strip().lower()
-    if not EMAIL_PATTERN.match(email):
+    email = normalise_email(parser.parse_args(argv).email)
+    if not email_looks_valid(email):
         print(f"{email!r} doesn't look like an email address.", file=sys.stderr)
         return 1
 

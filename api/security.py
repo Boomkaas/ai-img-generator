@@ -5,9 +5,12 @@ random value; only its SHA-256 hash is stored, so a copy of the database can't b
 """
 
 import hashlib
+import re
 import secrets
+import threading
 import time
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 
 import jwt
 from argon2 import PasswordHasher
@@ -22,21 +25,43 @@ ACCESS_COOKIE_PATH = "/"
 REFRESH_COOKIE_PATH = "/api/auth"  # both refresh and logout receive it (ADR 0003)
 JWT_ALGORITHM = "HS256"
 
+# "Looks valid": one @, something on both sides, a dot in the domain, no spaces. Delivery isn't checked.
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
 _hasher = PasswordHasher()
 # Checked when the email is unknown, so a sign-in takes as long whether or not the account exists.
 _DUMMY_HASH = _hasher.hash(secrets.token_urlsafe(16))
 
+# --- Email --------------------------------------------------------------------------------------------------
+
+
+def normalise_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def email_looks_valid(email: str) -> bool:
+    return len(email) <= get_settings().MAX_EMAIL_LEN and EMAIL_PATTERN.match(email) is not None
+
+
 # --- Passwords ----------------------------------------------------------------------------------------------
 
 
+@lru_cache
+def _hash_slots() -> threading.BoundedSemaphore:
+    """Handlers run in a pool of 40 threads; without this, 40 sign-ins at once would take 40 x 64 MiB."""
+    return threading.BoundedSemaphore(get_settings().MAX_CONCURRENT_PASSWORD_HASHES)
+
+
 def hash_password(password: str) -> str:
-    return _hasher.hash(password)
+    with _hash_slots():
+        return _hasher.hash(password)
 
 
 def verify_password(password_hash: str | None, password: str) -> bool:
     """True if the password matches; with no hash, does the same work and returns False."""
     try:
-        _hasher.verify(password_hash or _DUMMY_HASH, password)
+        with _hash_slots():
+            _hasher.verify(password_hash or _DUMMY_HASH, password)
     except (VerificationError, InvalidHashError):
         return False
     return password_hash is not None
