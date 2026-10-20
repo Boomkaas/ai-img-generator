@@ -14,8 +14,8 @@ from sqlalchemy import text
 
 from api import deps
 from api.metrics import RequestCounter
-from api.routes import auth
-from common import db, live
+from api.routes import admin, auth, tasks
+from common import celery_client, db, live
 from common.config import get_settings
 
 log = logging.getLogger(__name__)
@@ -30,6 +30,7 @@ async def lifespan(app: FastAPI):
     yield
     db.dispose_engine()
     live.reset_client()
+    celery_client.reset_app()
 
 
 def _check(name: str, probe) -> str:
@@ -75,6 +76,8 @@ def create_app() -> FastAPI:
 
     app.add_api_route(HEALTH_PATH, health, methods=["GET"])
     app.include_router(auth.router)
+    app.include_router(tasks.router)
+    app.include_router(admin.router)
     app.add_exception_handler(RequestValidationError, validation_error)
     app.add_exception_handler(Exception, server_error)
 
