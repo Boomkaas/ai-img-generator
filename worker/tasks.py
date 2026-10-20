@@ -6,6 +6,7 @@ import time
 
 from celery.exceptions import SoftTimeLimitExceeded
 from celery.signals import worker_process_init
+from sqlalchemy.exc import OperationalError
 
 from common import db, live, storage
 from common.config import get_settings
@@ -45,10 +46,17 @@ def result_key(task_id: str) -> str:
     return f"results/{task_id}.png"
 
 
+# Acks are late, but Celery still acks a task that raises, so a database outage at the claim would leave the
+# row queued with no message behind it. Retrying is safe: once a claim succeeds, every later one is refused.
 @celery_app.task(
     name="worker.tasks.generate_image",
     soft_time_limit=settings.TASK_SOFT_TIME_LIMIT,
     time_limit=settings.TASK_TIME_LIMIT,
+    autoretry_for=(OperationalError,),
+    max_retries=settings.WORKER_DB_MAX_RETRIES,
+    retry_backoff=True,
+    retry_backoff_max=settings.WORKER_DB_RETRY_BACKOFF_MAX_S,
+    retry_jitter=False,
 )
 def generate_image(task_id: str, user_id: str, prompt: str, size: int) -> None:
     # Only a task that is still queued may start. This also skips one cancelled while queued, even on a
@@ -94,7 +102,11 @@ def generate_image(task_id: str, user_id: str, prompt: str, size: int) -> None:
     finally:
         image = None
         gc.collect()  # keeps the worker's RAM flat across jobs
-        live.clear_task_keys(task_id)
+        try:
+            live.clear_task_keys(task_id)
+        except Exception:
+            # Both keys expire on their own; the idle state must not wait for Redis.
+            log.warning("could not clear the live keys of task %s", task_id, exc_info=True)
         live.set_worker_state(HOST, "idle")
         # Read back rather than assume: a refused finish means someone else set the final status.
         task = db.get_task(task_id)

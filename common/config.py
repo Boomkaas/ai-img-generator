@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     WORKER_THREADS: int = Field(2, ge=1)
     STEP_DELAY_SECONDS: float = Field(0, ge=0)
     NUM_STEPS: int = Field(25, ge=1)
+    # A job whose claim hits a database outage is retried after 1, 2, 4 ... s, capped at the backoff maximum;
+    # the defaults ride out about 11 min.
+    WORKER_DB_MAX_RETRIES: int = Field(16, ge=0)
+    WORKER_DB_RETRY_BACKOFF_MAX_S: int = Field(60, gt=0)
 
     # --- Limits on one task and on the number of tasks ---
     ALLOWED_SIZES: tuple[int, ...] = (256, 384, 512, 640, 768)

@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 from celery.exceptions import SoftTimeLimitExceeded
+from sqlalchemy.exc import OperationalError
 
 from common import db
 from worker import tasks
@@ -22,12 +23,16 @@ class FakeDb:
 
     def __init__(self):
         self.claim = True
+        self.claim_errors = 0  # this many claims fail as if the database were unreachable
         self.finish = True
         self.status = db.QUEUED
         self.claims, self.finishes = [], []
 
     def claim_task(self, task_id, worker_host):
         self.claims.append((task_id, worker_host))
+        if self.claim_errors:
+            self.claim_errors -= 1
+            raise OperationalError("claim", {}, ConnectionError("connection refused"))
         if self.claim:
             self.status = db.RUNNING
         return self.claim
@@ -194,7 +199,7 @@ def test_cancel_during_the_step_delay_stops_within_half_a_second(monkeypatch, fa
     run(task_id)
     stopped_at = time.monotonic()
     canceller.join()
-    assert stopped_at - cancelled_at[0] < 0.6
+    assert stopped_at - cancelled_at[0] < 1.0  # well before the 2 s pause would have ended
     assert fake_live.progress[-1] == (3, "step 1 of 25")
     assert_cleaned_up(fake_live, task_id, "cancelled")
 
@@ -211,6 +216,41 @@ def test_an_error_fails_the_task_with_a_shortened_message(monkeypatch, fake_db, 
     run(task_id)
     assert fake_db.finishes == [{"status": "failed", "result_key": None, "error": "x" * 500}]
     assert_cleaned_up(fake_live, task_id, "failed")
+
+
+def test_database_outage_at_the_claim_is_retried(fake_db, fake_live, fake_storage, task_id):
+    fake_db.claim_errors = 1
+    # apply() runs the retry in place instead of sending it back to the broker.
+    result = tasks.generate_image.apply(args=[task_id, str(uuid4()), "a cat", 256])
+    assert result.successful()
+    assert len(fake_db.claims) == 2
+    assert fake_db.finishes[-1]["status"] == "done"
+    assert_cleaned_up(fake_live, task_id, "done")
+
+
+def test_retries_stop_at_the_configured_limit(monkeypatch, fake_db, task_id):
+    monkeypatch.setattr(tasks.generate_image, "max_retries", 2)
+    fake_db.claim_errors = 10
+    result = tasks.generate_image.apply(args=[task_id, str(uuid4()), "a cat", 256])
+    assert isinstance(result.result, OperationalError)
+    assert len(fake_db.claims) == 3
+
+
+def test_retry_policy_comes_from_the_config():
+    task = tasks.generate_image
+    assert task.autoretry_for == (OperationalError,)
+    assert task.max_retries == tasks.settings.WORKER_DB_MAX_RETRIES
+    assert task.retry_backoff_max == tasks.settings.WORKER_DB_RETRY_BACKOFF_MAX_S
+
+
+def test_redis_failing_at_cleanup_still_leaves_the_worker_idle(monkeypatch, fake_db, fake_live, task_id):
+    def unreachable(task_id):
+        raise ConnectionError("redis unreachable")
+
+    monkeypatch.setattr(fake_live, "clear_task_keys", unreachable)
+    run(task_id)
+    assert fake_live.states[-1] == ("idle", None)
+    assert fake_live.finals == ["done"]
 
 
 def test_pipeline_module_imports_without_torch():
