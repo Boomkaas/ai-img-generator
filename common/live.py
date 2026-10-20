@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 
 # --- Keys and channels --------------------------------------------------------------------------------------
 
+GENERATION_QUEUE = "image_generation"  # the Celery queue, a Redis list under this name
 SYSTEM_CHANNEL = "system"
 ADMIN_CHANNEL = "admin"
 USER_CHANNEL_PATTERN = "user:*"  # each API process subscribes to this once
