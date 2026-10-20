@@ -67,6 +67,13 @@ class TaskOut(BaseModel):
     error_message: str | None = None
 
 
+class TaskPage(BaseModel):
+    """One page of history, newest first; pass `next_before` back as `before` for the next page."""
+
+    items: list[TaskOut]
+    next_before: datetime | None = None
+
+
 class Snapshot(BaseModel):
     """Sent right after a WebSocket connects: the system status and the user's active task, if any."""
 

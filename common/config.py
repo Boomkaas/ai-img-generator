@@ -48,6 +48,7 @@ class Settings(BaseSettings):
 
     # --- API process ---
     REQUEST_RATE_WINDOW_S: int = Field(60, gt=0)  # the rolling window behind requests_per_min
+    IMAGE_CACHE_MAX_AGE_S: int = Field(24 * 3600, ge=0)  # a finished image never changes
 
     # --- Worker ---
     MACHINE_NAME: str = Field(default_factory=socket.gethostname)
@@ -64,6 +65,8 @@ class Settings(BaseSettings):
     MAX_ACTIVE_TASKS_PER_USER: int = Field(1, ge=1)
     MAX_QUEUED_TOTAL: int = Field(30, ge=1)
     MAX_HISTORY_PER_USER: int = Field(50, ge=1)
+    HISTORY_PAGE_SIZE: int = Field(20, ge=1)
+    HISTORY_PAGE_MAX: int = Field(50, ge=1)  # a larger requested limit is cut to this
 
     # --- Timing and estimates ---
     MEASURED_MAX_RUNTIME_S: int = Field(1080, gt=0)  # example; replaced after calibration
