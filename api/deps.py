@@ -14,7 +14,7 @@ from common.config import get_settings
 SIGN_IN_AGAIN = "Please sign in again"
 
 
-def current_user(access_token: Annotated[str | None, Cookie()] = None) -> Row:
+def current_user(access_token: Annotated[str | None, Cookie(alias=security.ACCESS_COOKIE)] = None) -> Row:
     """The signed-in user, from the access cookie; 401 when it is missing, invalid or expired."""
     if not access_token:
         raise HTTPException(401, SIGN_IN_AGAIN)
