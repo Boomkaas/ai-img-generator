@@ -46,10 +46,21 @@ def email_looks_valid(email: str) -> bool:
 # --- Passwords ----------------------------------------------------------------------------------------------
 
 
+_hash_slots_lock = threading.Lock()
+
+
 @lru_cache
-def _hash_slots() -> threading.BoundedSemaphore:
-    """Handlers run in a pool of 40 threads; without this, 40 sign-ins at once would take 40 x 64 MiB."""
+def _new_hash_slots() -> threading.BoundedSemaphore:
     return threading.BoundedSemaphore(get_settings().MAX_CONCURRENT_PASSWORD_HASHES)
+
+
+def _hash_slots() -> threading.BoundedSemaphore:
+    """Handlers run in a pool of 40 threads; without this, 40 sign-ins at once would take 40 x 64 MiB.
+
+    The lock matters: threads racing on the first call would each get their own semaphore from lru_cache.
+    """
+    with _hash_slots_lock:
+        return _new_hash_slots()
 
 
 def hash_password(password: str) -> str:

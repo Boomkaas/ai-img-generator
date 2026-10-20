@@ -21,10 +21,10 @@ pytestmark = pytest.mark.unit
 def fresh_settings(monkeypatch):
     monkeypatch.setenv("ALLOWED_ORIGINS", "https://imagegen.example,http://localhost:5173")
     get_settings.cache_clear()
-    security._hash_slots.cache_clear()
+    security._new_hash_slots.cache_clear()
     yield
     get_settings.cache_clear()
-    security._hash_slots.cache_clear()
+    security._new_hash_slots.cache_clear()
 
 
 def test_password_round_trip():
