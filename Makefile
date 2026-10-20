@@ -60,7 +60,7 @@ test-e2e:  ## Playwright end-to-end tests
 # --- Run --------------------------------------------------------------------
 
 run-api:  ## Run the API server locally
-	@echo "run-api: added in step 04"
+	$(BIN)/uvicorn api.main:app --reload --port 8000
 
 run-worker:  ## Run one worker locally
 	@echo "run-worker: added in step 06"
