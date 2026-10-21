@@ -16,6 +16,8 @@ import psutil
 import redis
 import redis.asyncio
 from pydantic import BaseModel
+from redis.asyncio.retry import Retry
+from redis.backoff import NoBackoff
 
 from common.config import get_settings
 from common.messages import Alert, FinishedStatus, TaskFinal, TaskUpdate, WorkerState
@@ -93,11 +95,15 @@ def reset_client() -> None:
 def async_client() -> redis.asyncio.Redis:
     """A new asyncio client; the caller owns it and closes it (the WebSocket fan-out).
 
-    Only connecting is bounded: a pub/sub subscription can rightly wait minutes for its next message.
+    Only connecting is bounded: a pub/sub subscription can rightly wait minutes for its next message. It never
+    reconnects on its own, because messages published while it was away are lost and the caller has to know.
     """
     settings = get_settings()
     return redis.asyncio.Redis.from_url(
-        settings.REDIS_URL, decode_responses=True, socket_connect_timeout=settings.REDIS_CONNECT_TIMEOUT_S
+        settings.REDIS_URL,
+        decode_responses=True,
+        socket_connect_timeout=settings.REDIS_CONNECT_TIMEOUT_S,
+        retry=Retry(NoBackoff(), 0),
     )
 
 
