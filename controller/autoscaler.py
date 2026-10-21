@@ -38,8 +38,10 @@ def autoscale_tick(now: float, state: ControllerState) -> None:
 
     if starting > 0:
         # Never stack launches while one is still loading. One that Swarm can't place stays pending forever,
-        # so give up on it instead of waiting.
-        if now - state.starting_since > settings.STARTUP_TIMEOUT_S:
+        # so give up on it instead of waiting. Without Swarm nothing was launched, so there is nothing to
+        # give up on, and the alert would only repeat while no local worker runs.
+        timed_out = now - state.starting_since > settings.STARTUP_TIMEOUT_S
+        if timed_out and not isinstance(state.scaler, scalers.NullScaler):
             _change(now, state, desired, ready, ready, "Gave up on a worker that could not start")
             live.alert(CANNOT_START)
         return
@@ -49,7 +51,11 @@ def autoscale_tick(now: float, state: ControllerState) -> None:
 
     if desired < settings.MIN_WORKERS:
         _change(now, state, desired, settings.MIN_WORKERS, ready, "Raised the workers to the minimum")
-    elif waiting > settings.SCALE_UP_WAITING_PER_WORKER * ready and desired < settings.MAX_WORKERS:
+    # A worker stopped by a scale-down stays busy until its job is done, but will take no more jobs.
+    elif (
+        waiting > settings.SCALE_UP_WAITING_PER_WORKER * min(ready, desired)
+        and desired < settings.MAX_WORKERS
+    ):
         _change(now, state, desired, desired + 1, ready, "Added a worker")
     # Swarm picks which container to stop and may pick a busy one. It sends SIGTERM, Celery's warm shutdown
     # finishes the current job before exiting, and the worker's stop_grace_period (30 min, longer than
