@@ -4,12 +4,17 @@ The controller publishes it on the admin channel every tick, and the API serves 
 first paint, so it lives here rather than in either of them.
 """
 
+import logging
 import time
 from collections import defaultdict
+
+from pydantic import ValidationError
 
 from common import db, live
 from common.config import get_settings
 from common.messages import AdminOverview, ApiStats, AutoscalerItem, MachineItem, TaskItem, WorkerItem
+
+log = logging.getLogger(__name__)
 
 INFRA, APP = "infra", "app"
 
@@ -24,19 +29,26 @@ def admin_overview() -> AdminOverview:
             progress[key] = live.progress(key)
         return progress[key]
 
+    items = []
+    for hb in workers:
+        try:
+            items.append(
+                WorkerItem(
+                    name=hb.host,
+                    machine=hb.machine,
+                    state=hb.state,
+                    task_id=hb.task_id,
+                    progress=progress_of(hb.task_id) if hb.state == "busy" and hb.task_id else None,
+                    rss_mb=hb.rss_mb,
+                )
+            )
+        except ValidationError:
+            # One bad heartbeat mustn't freeze the whole admin panel.
+            log.warning("skipping the malformed heartbeat of %s", hb.host, exc_info=True)
+
     return AdminOverview(
         machines=_machines(workers),
-        workers=[
-            WorkerItem(
-                name=hb.host,
-                machine=hb.machine,
-                state=hb.state,
-                task_id=hb.task_id,
-                progress=progress_of(hb.task_id) if hb.state == "busy" and hb.task_id else None,
-                rss_mb=hb.rss_mb,
-            )
-            for hb in workers
-        ],
+        workers=items,
         tasks=_tasks(progress_of),
         autoscaler=_autoscaler(workers),
     )

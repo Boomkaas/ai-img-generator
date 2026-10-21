@@ -198,6 +198,19 @@ def test_orphans_wait_for_heartbeats_after_redis_restarts(fakes, state):
     assert fakes.db.finished == []
 
 
+def test_orphan_is_failed_once_the_restart_pause_is_over(fakes, state):
+    orphan = task(db.RUNNING, started=0)
+    fakes.db.tasks = [orphan]
+    fakes.live.run_id = "run-2"
+
+    sweeper.sweep(NOW + 100, state)  # sees the restart
+    sweeper.sweep(NOW + 114, state)
+    assert fakes.db.finished == []
+
+    sweeper.sweep(NOW + 115, state)  # HEARTBEAT_TTL_S later, still no heartbeat lists it
+    assert [entry[0] for entry in fakes.db.finished] == [orphan.id]
+
+
 # --- 2. A worker still busy with a task cancelled long ago --------------------------------------------------
 
 
@@ -212,6 +225,23 @@ def test_stuck_cancel_gets_one_terminating_revoke(fakes, state):
     sweeper.sweep(NOW + 61, state)
     sweeper.sweep(NOW + 66, state)
     assert fakes.celery.revoked == [(str(stuck.id), True)]
+
+
+def test_malformed_task_id_does_not_skip_the_other_workers(fakes, state, caplog):
+    def get_task(task_id):
+        if task_id == "not-a-uuid":
+            raise ValueError("badly formed hexadecimal UUID string")
+        return FakeDb.get_task(fakes.db, task_id)
+
+    stuck = task(db.CANCELLED, started=-30, finished=0)
+    fakes.db.tasks = [stuck]
+    fakes.db.get_task = get_task
+    fakes.live.heartbeats = [heartbeat("not-a-uuid"), heartbeat(stuck.id)]
+
+    sweeper.sweep(NOW + 61, state)
+
+    assert fakes.celery.revoked == [(str(stuck.id), True)]
+    assert "force_stop_cancelled failed" not in caplog.text
 
 
 def test_busy_worker_on_a_live_task_is_not_stopped(fakes, state):

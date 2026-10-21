@@ -54,7 +54,11 @@ def force_stop_cancelled(now: float, state: ControllerState) -> None:
     state.force_stopped &= busy  # once no worker has it, nothing more can be stopped
     after = get_settings().FORCE_STOP_AFTER_S
     for task_id in busy - state.force_stopped:
-        task = db.get_task(task_id)
+        try:
+            task = db.get_task(task_id)
+        except ValueError:
+            log.warning("a busy heartbeat names %r, which is not a task id", task_id)
+            continue
         if task is None or task.status != db.CANCELLED or now - task.finished_at.timestamp() <= after:
             continue
         log.warning("task %s was cancelled %d s ago and is still running: killing its worker", task_id, after)
