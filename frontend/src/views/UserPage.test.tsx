@@ -154,6 +154,28 @@ describe("following a task", () => {
   });
 });
 
+describe("a task that ended while the socket was down", () => {
+  it("is fetched again until the request works, then shows its result", async () => {
+    let attempts = 0;
+    stubFetch({
+      "GET /api/tasks/active": () => json(null),
+      [`GET /api/tasks/${ID}`]: () => {
+        attempts += 1;
+        return attempts === 1
+          ? json({ detail: "Something went wrong" }, 500)
+          : json(task({ status: "done" }));
+      },
+    });
+    renderPage();
+    await push({ type: "snapshot", system, task: task({ status: "running", progress: 80 }) });
+    await push({ type: "snapshot", system, task: null });
+    expect(
+      await screen.findByRole("button", { name: "Generate another" }, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(attempts).toBe(2);
+  });
+});
+
 describe("links", () => {
   it("shows Admin to admins", () => {
     stubFetch({ "GET /api/tasks/active": () => json(null) });
