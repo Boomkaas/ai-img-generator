@@ -6,6 +6,7 @@ resources, and everything shared lives in Postgres and Redis. Run with `make run
 
 import asyncio
 import contextlib
+import functools
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -50,7 +51,8 @@ async def report_heartbeat(hub: Hub, requests: RequestCounter) -> None:
 async def lifespan(app: FastAPI):
     db.get_engine()
     live.client()
-    app.state.hub = hub = Hub()
+    status = ws.SystemStatusCache(get_settings().SYSTEM_STATUS_CACHE_S)
+    app.state.hub = hub = Hub(functools.partial(ws.snapshot, status))
     hub.start()
     heartbeat = asyncio.create_task(report_heartbeat(hub, app.state.requests), name="api-heartbeat")
     yield

@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     WS_SEND_TIMEOUT_S: float = Field(5, gt=0)
     WS_OUTBOX_SIZE: int = Field(100, ge=1)  # a socket this many messages behind is closed
     WS_RESUBSCRIBE_BACKOFF_S: tuple[float, ...] = (1, 2, 5, 10)  # the last value repeats
+    WS_MAX_SOCKETS_PER_USER: int = Field(10, ge=1)
+    # Sockets connecting within this many seconds of each other share one status, so a reconnect storm after
+    # an API restart doesn't run the wait estimate once per browser.
+    SYSTEM_STATUS_CACHE_S: float = Field(1, ge=0)
+    ADMIN_RECHECK_INTERVAL_S: float = Field(5, gt=0)  # how soon a demoted admin stops getting the overview
 
     # --- Worker ---
     MACHINE_NAME: str = Field(default_factory=socket.gethostname)

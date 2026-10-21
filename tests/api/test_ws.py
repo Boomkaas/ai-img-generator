@@ -11,7 +11,7 @@ from starlette.websockets import WebSocketDisconnect
 from api import security
 from common import db, live
 from common.config import get_settings
-from common.messages import SystemStatus, TaskUpdate
+from common.messages import SystemStatus, TaskFinal, TaskUpdate
 
 pytestmark = pytest.mark.api
 
@@ -182,6 +182,7 @@ def test_system_messages_reach_everyone(user, other, admin, redis_live):
 def test_twenty_sockets_add_no_redis_connections(make_client, redis_live, monkeypatch):
     # The heartbeat writes once at startup and not again during the test, so it can't open a connection.
     monkeypatch.setenv("HEARTBEAT_INTERVAL_S", "14")
+    monkeypatch.setenv("WS_MAX_SOCKETS_PER_USER", "21")
     get_settings.cache_clear()
     client = sign_up(make_client())
     wait_for_hubs(redis_live, 1)
@@ -195,14 +196,55 @@ def test_twenty_sockets_add_no_redis_connections(make_client, redis_live, monkey
             assert len(pubsub_clients(redis_live)) == 1
 
 
-def test_hub_resubscribes_after_its_connection_is_killed(user, redis_live):
+def test_after_losing_its_subscription_the_hub_resends_snapshots(user, redis_live):
+    with db.transaction() as tx:
+        task = db.insert_task(tx, user_id_of(user), "a cat", 256, uuid4())
     wait_for_hubs(redis_live, 1)
     with connect(user) as socket:
-        receive(socket)
+        assert receive(socket)["task"]["task_id"] == str(task.id)
         [subscriber] = pubsub_clients(redis_live)
         redis_live.client_kill_filter(_id=subscriber["id"])
-        assert pubsub_clients(redis_live) == []
-        wait_for_hubs(redis_live, 1)
+
+        # The task ends while the hub is away, so its final message reaches nobody.
+        db.fail_queued(task.id, "queue unavailable")
+        final = TaskFinal(id=task.id, status="failed").model_dump_json()
+        assert redis_live.publish(live.user_channel(user_id_of(user)), final) == 0
+
+        # The socket was never closed; the fresh snapshot tells it the task is over.
+        resent = receive(socket)
+        assert resent["type"] == "snapshot"
+        assert resent["task"] is None
+        live.publish(live.SYSTEM_CHANNEL, SYSTEM)
+        assert receive(socket)["type"] == "system"
+
+
+def test_sockets_beyond_the_per_user_limit_are_refused(make_client, monkeypatch):
+    monkeypatch.setenv("WS_MAX_SOCKETS_PER_USER", "2")
+    get_settings.cache_clear()
+    client = sign_up(make_client())
+    with connect(client) as a, connect(client) as b:
+        receive(a)
+        receive(b)
+        with connect(client) as refused:
+            assert_closed_with(refused, 1008)
+    with connect(client) as again:
+        assert receive(again)["type"] == "snapshot"
+
+
+def test_a_demoted_admin_stops_getting_the_overview(make_client, redis_live, monkeypatch):
+    monkeypatch.setenv("ADMIN_RECHECK_INTERVAL_S", "0.1")
+    get_settings.cache_clear()
+    admin = sign_up(make_client())
+    admin_id = user_id_of(admin)
+    db.set_role(admin_id, "admin")
+    wait_for_hubs(redis_live, 1)
+    hub = admin.app.state.hub
+    with connect(admin) as socket:
+        receive(socket)
+        assert hub.admin_sockets == 1
+        db.set_role(admin_id, "user")
+        eventually(lambda: hub.admin_sockets == 0)
+        redis_live.publish(live.ADMIN_CHANNEL, '{"type": "admin"}')
         live.publish(live.SYSTEM_CHANNEL, SYSTEM)
         assert receive(socket)["type"] == "system"
 
