@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     # --- API process ---
     REQUEST_RATE_WINDOW_S: int = Field(60, gt=0)  # the rolling window behind requests_per_min
     IMAGE_CACHE_MAX_AGE_S: int = Field(24 * 3600, ge=0)  # a finished image never changes
+    WS_PING_INTERVAL_S: float = Field(25, gt=0)  # well inside Nginx's one-hour read timeout on /ws
+    WS_SEND_TIMEOUT_S: float = Field(5, gt=0)
+    WS_OUTBOX_SIZE: int = Field(100, ge=1)  # a socket this many messages behind is closed
+    WS_RESUBSCRIBE_BACKOFF_S: tuple[float, ...] = (1, 2, 5, 10)  # the last value repeats
 
     # --- Worker ---
     MACHINE_NAME: str = Field(default_factory=socket.gethostname)

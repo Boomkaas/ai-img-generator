@@ -34,6 +34,7 @@ EXAMPLES = [
     m.TaskFinal(id=TASK_ID, status="cancelled"),
     m.Snapshot(system=SYSTEM, task=TASK_OUT),
     m.Snapshot(system=SYSTEM, task=None),
+    m.Ping(),
     m.AdminOverview(
         machines=[
             m.MachineItem(
@@ -122,6 +123,7 @@ def test_docs_have_one_example_per_message_type():
         "TaskUpdate",
         "TaskFinal",
         "Snapshot",
+        "Ping",
         "AdminOverview",
         "TaskOut",
         "TaskPage",

@@ -27,16 +27,22 @@ log = logging.getLogger(__name__)
 GENERATION_QUEUE = "image_generation"  # the Celery queue, a Redis list under this name
 SYSTEM_CHANNEL = "system"
 ADMIN_CHANNEL = "admin"
-USER_CHANNEL_PATTERN = "user:*"  # each API process subscribes to this once
 AUTOSCALER_KEY = "controller:autoscaler"
 ALERTS_KEY = "controller:alerts"
+_USER_PREFIX = "user:"
+USER_CHANNEL_PATTERN = f"{_USER_PREFIX}*"  # each API process subscribes to this once
 _WORKER_PREFIX = "hb:worker:"
 _API_PREFIX = "hb:api:"
 _MACHINE_PREFIX = "hb:machine:"
 
 
 def user_channel(user_id) -> str:
-    return f"user:{user_id}"
+    return f"{_USER_PREFIX}{user_id}"
+
+
+def channel_user_id(channel: str) -> str:
+    """The user id in a `user_channel` name."""
+    return channel.removeprefix(_USER_PREFIX)
 
 
 def progress_key(task_id) -> str:

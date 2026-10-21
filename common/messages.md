@@ -65,6 +65,14 @@ returns it (`TaskOut`, below), or `null` when there is none.
 }
 ```
 
+## Ping — `ping`
+
+Every 25 s on every socket, so the client can tell a quiet socket from a dead one. It carries nothing else.
+
+```json
+{"type": "ping"}
+```
+
 ## AdminOverview — `admin`
 
 Every 5 s, to admin sockets only; `GET /api/admin/overview` returns the same object. `api` is `null` on

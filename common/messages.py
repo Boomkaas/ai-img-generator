@@ -82,6 +82,12 @@ class Snapshot(BaseModel):
     task: TaskOut | None = None
 
 
+class Ping(BaseModel):
+    """Sent on a fixed interval, so the client can tell a quiet socket from a dead one."""
+
+    type: Literal["ping"] = "ping"
+
+
 # --- Admin overview -----------------------------------------------------------------------------------------
 
 
@@ -141,7 +147,7 @@ class AdminOverview(BaseModel):
 
 
 Message = Annotated[
-    SystemStatus | TaskUpdate | TaskFinal | Snapshot | AdminOverview,
+    SystemStatus | TaskUpdate | TaskFinal | Snapshot | Ping | AdminOverview,
     Field(discriminator="type"),
 ]
 _message_adapter: TypeAdapter[Message] = TypeAdapter(Message)
