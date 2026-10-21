@@ -60,7 +60,7 @@ test-e2e:  ## Playwright end-to-end tests
 # --- Run --------------------------------------------------------------------
 
 run-api:  ## Run the API server locally
-	$(BIN)/uvicorn api.main:app --reload --port 8000
+	$(BIN)/uvicorn api.main:app --reload --port 8000 --ws-ping-interval 25
 
 run-worker:  ## Run one worker locally with the fake pipeline
 	PIPELINE=fake FAKE_STEP_SECONDS=1 $(BIN)/celery -A worker.app:celery_app worker \

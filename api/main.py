@@ -4,15 +4,20 @@ Each API process is stateless: the engine, the Redis client and the request coun
 resources, and everything shared lives in Postgres and Redis. Run with `make run-api`.
 """
 
+import asyncio
+import contextlib
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from starlette.concurrency import run_in_threadpool
 
-from api import deps
+from api import deps, ws
+from api.hub import Hub
 from api.metrics import RequestCounter
 from api.routes import admin, auth, tasks
 from common import celery_client, db, live
@@ -23,11 +28,36 @@ log = logging.getLogger(__name__)
 HEALTH_PATH = "/api/health"
 
 
+async def report_heartbeat(hub: Hub, requests: RequestCounter) -> None:
+    """Every few seconds, tell the admin panel this process's open sockets and request rate."""
+    settings = get_settings()
+    per_minute = 60 / settings.REQUEST_RATE_WINDOW_S
+    while True:
+        try:
+            await run_in_threadpool(
+                live.write_api_heartbeat,
+                settings.MACHINE_NAME,
+                os.getpid(),
+                sockets=hub.sockets,
+                requests_per_min=round(requests.count() * per_minute),
+            )
+        except Exception:
+            log.warning("could not write the api heartbeat", exc_info=True)
+        await asyncio.sleep(settings.HEARTBEAT_INTERVAL_S)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.get_engine()
     live.client()
+    app.state.hub = hub = Hub()
+    hub.start()
+    heartbeat = asyncio.create_task(report_heartbeat(hub, app.state.requests), name="api-heartbeat")
     yield
+    heartbeat.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await heartbeat
+    await hub.stop()
     db.dispose_engine()
     live.reset_client()
     celery_client.reset_app()
@@ -78,6 +108,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(tasks.router)
     app.include_router(admin.router)
+    app.include_router(ws.router)
     app.add_exception_handler(RequestValidationError, validation_error)
     app.add_exception_handler(Exception, server_error)
 
