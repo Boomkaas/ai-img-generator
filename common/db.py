@@ -316,6 +316,17 @@ def active_tasks() -> Sequence[Row]:
     return _all(stmt)
 
 
+def active_tasks_with_email() -> Sequence[Row]:
+    """Active tasks with their owner's email as `user_email`, in the same order as `active_tasks`."""
+    stmt = (
+        select(tasks, users.c.email.label("user_email"))
+        .join(users, users.c.id == tasks.c.user_id)
+        .where(tasks.c.status.in_(ACTIVE_STATUSES))
+        .order_by(tasks.c.created_at, tasks.c.id)
+    )
+    return _all(stmt)
+
+
 def running_tasks(started_before: datetime | float | None = None) -> Sequence[Row]:
     stmt = select(tasks).where(tasks.c.status == RUNNING)
     if started_before is not None:

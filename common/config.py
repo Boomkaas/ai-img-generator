@@ -102,6 +102,12 @@ class Settings(BaseSettings):
     CANCEL_FLAG_TTL_S: int | None = None
     WORKER_PROC_ALIVE_TIMEOUT: int = Field(180, gt=0)  # longer than loading the model
 
+    # --- Controller / sweeper ---
+    CONTROLLER_TICK_S: float = Field(5, gt=0)
+    ORPHAN_AFTER_S: int = Field(60, gt=0)  # a running task no heartbeat lists for this long is failed
+    FORCE_STOP_AFTER_S: int = Field(60, gt=0)  # a cancelled task's worker still busy after this is killed
+    HISTORY_CLEANUP_INTERVAL_S: int = Field(600, gt=0)
+
     # --- Controller / autoscaler ---
     SCALER: Literal["none", "swarm"] = "none"
     WORKER_SERVICE: str = "imagegen_worker"

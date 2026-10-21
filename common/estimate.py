@@ -7,7 +7,9 @@ average.
 
 import heapq
 import statistics
+import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 
 from common import db, live
@@ -80,6 +82,30 @@ def ready_in_seconds(task, spu: float | None = None) -> float:
     if task.status == db.RUNNING:
         return _remaining_cost(task) * spu
     return 0.0
+
+
+@dataclass(frozen=True)
+class Forecast:
+    ready_in_s: dict[uuid.UUID, float]  # per active task
+    new_image_ready_in_s: float
+
+
+def forecast(active: Sequence, spu: float) -> Forecast:
+    """`ready_in_seconds` for every active task and `new_image_ready_in_s`, from one read of the queue.
+
+    `active` is `db.active_tasks()`, so the queued ones are in queue order.
+    """
+    running = sorted((t for t in active if t.status == db.RUNNING), key=lambda t: (t.started_at, t.id))
+    queued = [t for t in active if t.status == db.QUEUED]
+    remaining = [_remaining_cost(t) for t in running]
+    queued_costs = [cost(t.size) for t in queued]
+    n_workers = live.count_workers(("idle", "busy"))
+
+    ready = {t.id: left * spu for t, left in zip(running, remaining, strict=True)}
+    for i, t in enumerate(queued):
+        ready[t.id] = simulate_wait(remaining, queued_costs[:i], n_workers, spu) + queued_costs[i] * spu
+    new = simulate_wait(remaining, queued_costs, n_workers, spu) + cost(BASE_SIZE) * spu
+    return Forecast(ready_in_s=ready, new_image_ready_in_s=new)
 
 
 def new_image_ready_in_s(spu: float | None = None) -> float:

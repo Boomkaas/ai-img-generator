@@ -83,9 +83,9 @@ a `progress` while running and a `position` while queued.
 {
   "type": "admin",
   "machines": [
-    {"name": "nodeA", "role": "manager", "cpu": 23.5, "ram": 41.0, "api": {"sockets": 3, "requests_per_min": 42}},
+    {"name": "nodeA", "role": "infra", "cpu": 23.5, "ram": 41.0, "api": {"sockets": 3, "requests_per_min": 42}},
     {"name": "nodeB", "role": "app", "cpu": 97.1, "ram": 68.4, "api": {"sockets": 2, "requests_per_min": 17}},
-    {"name": "nodeC", "role": "worker", "cpu": 3.0, "ram": 12.2, "api": null}
+    {"name": "nodeC", "role": "app", "cpu": 3.0, "ram": 12.2, "api": null}
   ],
   "workers": [
     {"name": "nodeB-worker-1", "machine": "nodeB", "state": "busy", "task_id": "3f2b8c1e-7d4a-4e5b-9a6c-1d2e3f4a5b6c", "progress": 36, "rss_mb": 5320},
