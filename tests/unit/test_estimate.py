@@ -147,3 +147,13 @@ def test_ready_in_seconds_for_each_status(fake_state):
 def test_new_image_waits_for_the_whole_queue(fake_state):
     fake_state(workers=1, running=[task(512, "running", progress=50)], queued=[task(256, "queued")])
     assert estimate.new_image_ready_in_s(spu=SPU) == 240 + 120 + 480
+
+
+def test_forecast_agrees_with_ready_in_seconds(fake_state):
+    running = [task(512, "running", started=5, progress=50), task(768, "running", started=1, progress=10)]
+    queued = [task(256, "queued", created=1), task(768, "queued", created=2), task(512, "queued", created=3)]
+    fake_state(workers=2, running=running, queued=queued)
+    forecast = estimate.forecast(running + queued, SPU)
+    for t in running + queued:
+        assert forecast.ready_in_s[t.id] == pytest.approx(estimate.ready_in_seconds(t, spu=SPU))
+    assert forecast.new_image_ready_in_s == pytest.approx(estimate.new_image_ready_in_s(spu=SPU))
