@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from common import live, overview
 from common.config import get_settings
 from controller import autoscaler, status, sweeper
+from controller.scalers import Scaler
 
 log = logging.getLogger(__name__)
 
@@ -19,7 +20,9 @@ log = logging.getLogger(__name__)
 @dataclass
 class ControllerState:
     redis_run_id: str | None = None
+    scaler: Scaler | None = None  # created on the first tick, so a Docker error is logged like any other
     last_scale_at: float = 0.0
+    starting_since: float | None = None  # when the autoscaler first saw a launched worker not yet ready
     last_cleanup: float = 0.0
     redis_changed_at: float = 0.0  # when the sweeper last saw a new Redis run id
     force_stopped: set[str] = field(default_factory=set)  # tasks whose worker was already killed
