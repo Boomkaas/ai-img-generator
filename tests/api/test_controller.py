@@ -138,3 +138,13 @@ def test_overview_shows_busy_workers_progress_and_owner(redis_live):
     )
     # Before the autoscaler reports, its block falls back to the heartbeats.
     assert (overview.autoscaler.ready, overview.autoscaler.starting) == (1, 0)
+
+
+def test_a_malformed_heartbeat_is_left_out_of_the_overview(redis_live):
+    live.set_worker_state("nodeB-worker-1", "idle")
+    live.set_worker_state("nodeB-worker-2", "idle")
+    redis_live.hset(live.worker_key("nodeB-worker-2"), mapping={"state": "dreaming", "task_id": "not-a-uuid"})
+
+    overview = admin_overview()
+
+    assert [w.name for w in overview.workers] == ["nodeB-worker-1"]
