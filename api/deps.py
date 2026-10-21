@@ -14,15 +14,20 @@ from common.config import get_settings
 SIGN_IN_AGAIN = "Please sign in again"
 
 
-def current_user(access_token: Annotated[str | None, Cookie(alias=security.ACCESS_COOKIE)] = None) -> Row:
-    """The signed-in user, from the access cookie; 401 when it is missing, invalid or expired."""
+def user_from_token(access_token: str | None) -> Row | None:
+    """The token's user; None when the token is missing, invalid or expired, or the user is gone."""
     if not access_token:
-        raise HTTPException(401, SIGN_IN_AGAIN)
+        return None
     try:
         claims = security.decode_access_token(access_token)
-        user = db.get_user(claims["sub"])
+        return db.get_user(claims["sub"])
     except (jwt.PyJWTError, ValueError):  # ValueError: a validly signed sub that isn't a UUID
-        raise HTTPException(401, SIGN_IN_AGAIN) from None
+        return None
+
+
+def current_user(access_token: Annotated[str | None, Cookie(alias=security.ACCESS_COOKIE)] = None) -> Row:
+    """The signed-in user, from the access cookie; 401 when it is missing, invalid or expired."""
+    user = user_from_token(access_token)
     if user is None:
         raise HTTPException(401, SIGN_IN_AGAIN)
     return user
