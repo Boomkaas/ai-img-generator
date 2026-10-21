@@ -1,4 +1,4 @@
-import { PING_TIMEOUT_S, RECONNECT_DELAYS_S } from "../config";
+import { PING_TIMEOUT_S, retryDelayMs } from "../config";
 import { notifySignedOut, refreshSession } from "./http";
 import type { ServerMessage } from "./types";
 
@@ -25,9 +25,8 @@ export function openSocket(onMessage: (message: ServerMessage) => void): () => v
   }
 
   function reconnectLater() {
-    const delay = RECONNECT_DELAYS_S[Math.min(attempt, RECONNECT_DELAYS_S.length - 1)] ?? 10;
+    retryTimer = setTimeout(connect, retryDelayMs(attempt));
     attempt += 1;
-    retryTimer = setTimeout(connect, delay * 1000);
   }
 
   // A socket whose peer vanished can stay "open" for minutes; silence is the only reliable sign.
@@ -62,11 +61,17 @@ export function openSocket(onMessage: (message: ServerMessage) => void): () => v
         reconnectLater();
         return;
       }
-      void refreshSession().then((ok) => {
-        if (stopped) return;
-        if (ok) reconnectLater();
-        else notifySignedOut();
-      });
+      // Only a refused refresh ends the session; an unreachable server is retried like any other drop.
+      refreshSession().then(
+        (ok) => {
+          if (stopped) return;
+          if (ok) reconnectLater();
+          else notifySignedOut();
+        },
+        () => {
+          if (!stopped) reconnectLater();
+        },
+      );
     };
   }
 

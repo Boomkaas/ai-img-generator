@@ -5,4 +5,9 @@ export const DEFAULT_SIZE = 512;
 
 // The server pings every 25 s, so two missed pings mean the socket is dead.
 export const PING_TIMEOUT_S = 60;
-export const RECONNECT_DELAYS_S = [1, 2, 5, 10]; // the last value repeats
+// Between socket reconnects and between refetches of a finished task; the last value repeats.
+export const RETRY_DELAYS_S = [1, 2, 5, 10];
+
+export function retryDelayMs(attempt: number): number {
+  return (RETRY_DELAYS_S[Math.min(attempt, RETRY_DELAYS_S.length - 1)] ?? 10) * 1000;
+}

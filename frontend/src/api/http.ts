@@ -37,15 +37,18 @@ const NO_REFRESH = new Set([
 let refreshing: Promise<boolean> | null = null;
 
 /**
- * Trade the refresh cookie for a new access cookie. Callers that arrive together share one request: the
- * server takes a refresh token used twice for a stolen one and ends every session of the user.
+ * Trade the refresh cookie for a new access cookie: true if that worked, false if the server refused it.
+ * Rejects with NetworkError or ApiError when there was no clear answer, so a dropped connection doesn't sign
+ * the user out. Callers that arrive together share one request: the server takes a refresh token used twice
+ * for a stolen one and ends every session of the user.
  */
 export function refreshSession(): Promise<boolean> {
   refreshing ??= send("POST", "/api/auth/refresh")
-    .then(
-      (response) => response.ok,
-      () => false,
-    )
+    .then(async (response) => {
+      if (response.ok) return true;
+      if (response.status === 401) return false;
+      throw new ApiError(response.status, await readBody(response));
+    })
     .finally(() => {
       refreshing = null;
     });
