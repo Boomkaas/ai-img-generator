@@ -67,4 +67,4 @@ run-worker:  ## Run one worker locally with the fake pipeline
 		--pool=prefork --concurrency=1 -Q image_generation --loglevel=info
 
 run-controller:  ## Run the controller locally
-	@echo "run-controller: not implemented yet"
+	$(BIN)/python -m controller.main
