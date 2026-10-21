@@ -23,6 +23,19 @@ If a host port is already taken (for example by a local Postgres), override it:
 
 `make help` lists every target.
 
+## Frontend
+
+Requires Node 22. With `make run-api`, `make run-worker` and `make run-controller` running:
+
+```bash
+cd frontend
+npm ci
+npm run dev        # http://localhost:5173, proxies /api and /ws to the API on port 8000
+npm run lint && npm run typecheck && npm test && npm run build
+```
+
+`ALLOWED_ORIGINS` in `.env` must include `http://localhost:5173`, or the server closes the WebSocket.
+
 ## Running the real model locally
 
 `make run-worker` uses the fake pipeline, which sleeps instead of computing. To generate real images, install
