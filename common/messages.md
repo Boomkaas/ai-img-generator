@@ -34,6 +34,10 @@ The controller sends the queue position and the ready time every 5 s:
 
 When the task ends (done, failed or cancelled). The client then fetches the task over HTTP.
 
+The controller reads the queue a moment before it publishes, so a `task` message can arrive after the task
+has moved on. A task's status only moves forward (queued, running, then final): the client ignores a `task`
+message for an id that already had `task_final`, and a `queued` one for a task it has seen running.
+
 ```json
 {"type": "task_final", "id": "3f2b8c1e-7d4a-4e5b-9a6c-1d2e3f4a5b6c", "status": "done"}
 ```
