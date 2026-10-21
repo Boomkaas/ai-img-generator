@@ -3,30 +3,48 @@ import { Link } from "react-router-dom";
 import { cancelTask, getActiveTask, getTask } from "../api/http";
 import { openSocket } from "../api/socket";
 import type { FinishedStatus, TaskOut, User } from "../api/types";
+import { retryDelayMs } from "../config";
 import { errorText } from "../errors";
-import { initialState, isActive, reducer } from "../state";
+import { initialState, isActive, reducer, type Action } from "../state";
 import { StatusLine, TaskForm, TaskView } from "./Generator";
 import { History } from "./History";
 
 export function UserPage({ user, onLogOut }: { user: User; onLogOut: () => void }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, render] = useReducer(reducer, initialState);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const stateRef = useRef(state);
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
-
-  // Fetch a task that has ended, so the done or failed view has everything it shows.
-  const settle = useCallback(async (id: string, status?: FinishedStatus) => {
-    try {
-      dispatch({ type: "settled", task: await getTask(id) });
-    } catch {
-      const current = stateRef.current.task;
-      if (status && current?.task_id === id) dispatch({ type: "settled", task: { ...current, status } });
-    }
+  // Updated with every dispatch rather than after the next render, so socket messages handled back to back
+  // each see the state the one before left.
+  const stateRef = useRef(initialState);
+  const dispatch = useCallback((action: Action) => {
+    stateRef.current = reducer(stateRef.current, action);
+    render(action);
   }, []);
+  const mounted = useRef(false);
+
+  // Fetch a task that has ended, so the done or failed view has everything it shows. Retried while the task
+  // is still on screen as active, so one failed request can't leave the page stuck on the running view.
+  const settle = useCallback(
+    async (id: string, status?: FinishedStatus) => {
+      for (let attempt = 0; mounted.current; attempt += 1) {
+        try {
+          dispatch({ type: "settled", task: await getTask(id) });
+          return;
+        } catch {
+          const current = stateRef.current.task;
+          if (current?.task_id !== id || !isActive(current)) return;
+          if (status) {
+            dispatch({ type: "settled", task: { ...current, status } });
+            return;
+          }
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs(attempt)));
+        }
+      }
+    },
+    [dispatch],
+  );
 
   useEffect(() => {
+    mounted.current = true;
     let stopped = false;
     let close: (() => void) | undefined;
     // Restores the job view after a reload; the socket's snapshot then keeps it current.
@@ -58,10 +76,11 @@ export function UserPage({ user, onLogOut }: { user: User; onLogOut: () => void 
         });
       });
     return () => {
+      mounted.current = false;
       stopped = true;
       close?.();
     };
-  }, [settle]);
+  }, [dispatch, settle]);
 
   // Returns the sentence to show when the cancel itself failed.
   const onCancel = useCallback(
@@ -76,7 +95,7 @@ export function UserPage({ user, onLogOut }: { user: User; onLogOut: () => void 
         return errorText(error);
       }
     },
-    [settle],
+    [dispatch, settle],
   );
   const closeHistory = useCallback(() => setHistoryOpen(false), []);
 

@@ -36,6 +36,10 @@ npm run lint && npm run typecheck && npm test && npm run build
 
 `ALLOWED_ORIGINS` in `.env` must include `http://localhost:5173`, or the server closes the WebSocket.
 
+Open the page as `localhost` or over HTTPS. Submitting creates its idempotency key with
+`crypto.randomUUID()`, which browsers only provide in a secure context, so `http://<LAN address>:5173` can sign
+in but can't generate.
+
 ## Running the real model locally
 
 `make run-worker` uses the fake pipeline, which sleeps instead of computing. To generate real images, install

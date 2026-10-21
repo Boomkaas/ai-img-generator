@@ -66,4 +66,46 @@ describe("History", () => {
     await user.click(container.querySelector(".backdrop")!);
     expect(onClose).toHaveBeenCalledTimes(3);
   });
+
+  it("asks for the next page once however often Load more is clicked", async () => {
+    const cursor = "2026-10-17T09:12:03Z";
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const fetch = stubFetch({
+      "GET /api/tasks": () => json({ items: [done], next_before: cursor }),
+      [`GET /api/tasks?before=${encodeURIComponent(cursor)}`]: async () => {
+        await gate;
+        return json({ items: [failed], next_before: null });
+      },
+    });
+    render(<History onClose={() => undefined} />);
+    const user = userEvent.setup();
+    const more = await screen.findByRole("button", { name: "Load more" });
+    await user.click(more);
+    await user.click(more);
+    release();
+    expect(await screen.findByText("a dog")).toBeInTheDocument();
+    expect(screen.getAllByText("a dog")).toHaveLength(1);
+    expect(fetch.mock.calls.filter(([path]) => path.includes("before="))).toHaveLength(1);
+  });
+
+  it("keeps Tab inside the drawer", async () => {
+    stubFetch({ "GET /api/tasks": () => json({ items: [done], next_before: null }) });
+    render(
+      <>
+        <button type="button">Behind</button>
+        <History onClose={() => undefined} />
+      </>,
+    );
+    const entry = await screen.findByRole("button", { name: /a lighthouse at dusk/ });
+    const close = screen.getByRole("button", { name: "Close" });
+    expect(close).toHaveFocus();
+    const user = userEvent.setup();
+    await user.tab();
+    expect(entry).toHaveFocus();
+    await user.tab();
+    expect(close).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(entry).toHaveFocus();
+  });
 });

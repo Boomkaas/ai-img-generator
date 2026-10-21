@@ -137,6 +137,11 @@ a:hover {
   color: var(--fg);
 }
 
+.link:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
 .error {
   margin: 0 0 16px;
   color: var(--danger);
