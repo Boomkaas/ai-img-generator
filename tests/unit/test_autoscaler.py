@@ -159,6 +159,21 @@ def test_startup_clock_resets_once_the_worker_is_ready(fake):
     assert fake.state.starting_since is None
 
 
+def test_without_swarm_a_worker_that_never_appears_is_not_given_up_on(fake):
+    fake.state.scaler = NullScaler(1)
+    fake.state.starting_since = NOW - STARTUP_TIMEOUT_S - 1
+    fake.tick()
+    assert fake.state.scaler.replicas() == 1
+    assert fake.live.alerts == []
+
+
+def test_a_draining_worker_does_not_count_against_scaling_up(fake):
+    # Scaled down from 3 to 2; the stopped worker is still finishing its job.
+    fake.setup(replicas=2, ready=3, queued=5)
+    fake.tick()
+    assert fake.scaler.calls == [3]
+
+
 def test_respects_cooldown(fake):
     fake.setup(replicas=1, ready=1, queued=10)
     fake.state.last_scale_at = NOW
@@ -231,8 +246,8 @@ def test_every_change_updates_the_saved_state(fake, setup, action):
     new = fake.scaler.count
     assert fake.live.saved == {
         "desired": new,
-        "ready": setup["replicas"],
-        "starting": max(new - setup["replicas"], 0),
+        "ready": setup["ready"],
+        "starting": max(new - setup["ready"], 0),
         "maximum": MAX_WORKERS,
         "last_action": action,
     }
