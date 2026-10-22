@@ -62,6 +62,35 @@ MODEL_DIR=./models/sd15 PIPELINE=real .venv/bin/celery -A worker.app:celery_app 
 
 Loading takes 20–60 s, and one 512 px image takes several minutes with `WORKER_THREADS=2`.
 
+## Running on a cluster
+
+The system runs on Docker Swarm: machine A (label `imagegen.infra=true`) holds Nginx, Redis, Postgres, MinIO
+and the controller; the app machines (label `imagegen.app=true`) run the API servers and workers.
+
+```bash
+make images TAG=1.0.0 REGISTRY=<registry>             # api, controller, nginx, fake worker
+make image-worker-real TAG=1.0.0 REGISTRY=<registry>  # torch and the model weights, several GB
+```
+
+- `infra/docker/` holds the Dockerfiles, `infra/nginx/` the load balancer config, `infra/stack.yml` the stack.
+- `scripts/swarm/` creates the cluster (`init-manager.sh`, `label-app-node.sh`, `create-secrets.sh`,
+  `prepull.sh`) and deploys it (`deploy.sh <tag>`, which reads `infra/.env.prod`; start from
+  `infra/.env.prod.example`). `scripts/swarm/add-machine.md` covers growing the cluster.
+- `infra/stack.dev-swarm.yml` is an override for trying the whole stack on one machine with the fake worker:
+  `scripts/swarm/deploy.sh <tag> infra/stack.dev-swarm.yml`.
+
+Every timeout and the worker sizing come from `scripts/calibrate.py`, run on each app machine inside the real
+worker image:
+
+```bash
+docker run --rm --cpus 2 --memory 10g -e STEP_DELAY_SECONDS=2 <registry>/imagegen-worker:<tag> \
+    python -m scripts.calibrate
+```
+
+It prints `MEASURED_MAX_RUNTIME_S` and `CALIBRATED_SECONDS_PER_COST_UNIT` for `common/config.py`, the worker's
+`stop_grace_period` and memory reservation for `infra/stack.yml`, and how many workers fit on the machine
+(their sum is `MAX_WORKERS`). Keep the slowest machine's times.
+
 ## Repository settings
 
 Set these by hand on GitHub (Settings → Branches / General):
