@@ -11,10 +11,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN useradd --system --uid 10001 --user-group --create-home app
 WORKDIR /app
 
-COPY pyproject.toml infra/docker/requirements.py ./
+COPY pyproject.toml infra/docker/requirements.py infra/docker/constraints.txt ./
 RUN python requirements.py worker > requirements.txt \
-    && pip install -r requirements.txt \
-    && rm requirements.py requirements.txt
+    && pip install -r requirements.txt -c constraints.txt \
+    && rm requirements.py requirements.txt constraints.txt
 
 CMD ["celery", "-A", "worker.app:celery_app", "worker", "--pool=prefork", "--concurrency=1", \
      "-Q", "image_generation", "--loglevel=info"]

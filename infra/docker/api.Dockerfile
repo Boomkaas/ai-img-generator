@@ -9,10 +9,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN useradd --system --uid 10001 --user-group --no-create-home app
 WORKDIR /app
 
-COPY pyproject.toml infra/docker/requirements.py ./
+COPY pyproject.toml infra/docker/requirements.py infra/docker/constraints.txt ./
 RUN python requirements.py api > requirements.txt \
-    && pip install -r requirements.txt \
-    && rm requirements.py requirements.txt
+    && pip install -r requirements.txt -c constraints.txt \
+    && rm requirements.py requirements.txt constraints.txt
 
 COPY alembic.ini ./
 COPY common/ common/
