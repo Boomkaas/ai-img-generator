@@ -13,9 +13,17 @@ if [ $# -lt 1 ]; then
     echo "usage: $0 <tag> [extra stack file ...]" >&2
     exit 2
 fi
-cd "$(dirname "$0")/../.."
 
-env_file=${ENV_FILE:-infra/.env.prod}
+# Paths given on the command line are relative to where the script was started, not to the repository.
+absolute() {
+    case $1 in
+        /*) printf '%s' "$1" ;;
+        *) printf '%s/%s' "$PWD" "$1" ;;
+    esac
+}
+
+repo=$(cd "$(dirname "$0")/../.." && pwd)
+env_file=$(absolute "${ENV_FILE:-$repo/infra/.env.prod}")
 if [ ! -f "$env_file" ]; then
     echo "$env_file not found; copy infra/.env.prod.example and fill it in" >&2
     exit 1
@@ -35,9 +43,9 @@ for name in REGISTRY DOMAIN REDIS_PASSWORD PG_PASSWORD MINIO_PASSWORD JWT_SECRET
     fi
 done
 
-files="-c infra/stack.yml"
+files="-c $repo/infra/stack.yml"
 for extra in "$@"; do
-    files="$files -c $extra"
+    files="$files -c $(absolute "$extra")"
 done
 # The stack name is fixed: the controller scales imagegen_worker.
 docker stack deploy $files imagegen --with-registry-auth
