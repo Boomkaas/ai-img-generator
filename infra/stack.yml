@@ -81,8 +81,10 @@ services:
       <<: *app_env
       DB_POOL_SIZE: "5"
       MACHINE_NAME: "{{.Node.Hostname}}"
+    # Only whether the process answers at all: /api/health answers 503 while Postgres or Redis is down, and
+    # restarting every API server then would only drop every WebSocket without bringing either back.
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4)"]
+      test: ["CMD", "python", "-c", "import http.client as h; c = h.HTTPConnection('127.0.0.1', 8000, timeout=4); c.request('GET', '/api/health'); c.getresponse()"]
       interval: 10s
       timeout: 5s
       retries: 3
