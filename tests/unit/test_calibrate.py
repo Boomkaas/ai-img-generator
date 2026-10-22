@@ -68,12 +68,13 @@ def test_report_lists_every_number_to_paste():
     s = settings()
     m = measurement()
     text = report(m, recommend(m, s), s)
+    lines = text.splitlines()
     for line in (
         "MEASURED_MAX_RUNTIME_S = 701",
         "CALIBRATED_SECONDS_PER_COST_UNIT = 301",
         "stop_grace_period: 21m",
         'reservations: {cpus: "2", memory: 7G}',
         'limits: {cpus: "2", memory: 8G}',
-        "= min(2, 3) = 2",
     ):
-        assert line in text
+        assert line in lines
+    assert lines[-1].endswith("= min(2, 3) = 2")

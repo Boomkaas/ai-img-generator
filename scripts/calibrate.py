@@ -1,7 +1,7 @@
 """Time the real pipeline on this machine and print the timeouts and worker sizing to configure.
 
-    docker run --rm --cpus 2 --memory 10g -e STEP_DELAY_SECONDS=2 <worker image, real target> \
-        python -m scripts.calibrate
+    docker run --rm --cpus 2 --memory 10g --hostname "$(hostname)" -e STEP_DELAY_SECONDS=2 \
+        <worker image, real target> python -m scripts.calibrate
 
 Runs one 512 px job (one cost unit) and one job at the largest allowed size, with this machine's
 WORKER_THREADS and STEP_DELAY_SECONDS. Run it on every app machine and keep the slowest result.
@@ -91,7 +91,7 @@ peak memory {m.peak_bytes / GB:.1f} GB
 
 # common/config.py (defaults)
 MEASURED_MAX_RUNTIME_S = {t.MEASURED_MAX_RUNTIME_S}
-CALIBRATED_SECONDS_PER_COST_UNIT = {t.CALIBRATED_SECONDS_PER_COST_UNIT}
+CALIBRATED_SECONDS_PER_COST_UNIT = {t.CALIBRATED_SECONDS_PER_COST_UNIT:g}
 # derived from it: {derived}
 
 # infra/stack.yml, service worker
