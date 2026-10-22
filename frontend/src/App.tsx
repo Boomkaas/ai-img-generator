@@ -54,9 +54,9 @@ export function App() {
       />
       <Route
         path="/admin"
-        element={signedInOnly(() => (
-          <AdminPage />
-        ))}
+        element={signedInOnly((user) =>
+          user.role === "admin" ? <AdminPage /> : <Navigate to="/" replace />,
+        )}
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
