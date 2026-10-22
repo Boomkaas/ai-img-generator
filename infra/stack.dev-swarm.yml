@@ -1,0 +1,23 @@
+# One-machine smoke run on a swarm whose only node carries both labels:
+#   scripts/swarm/deploy.sh <tag> infra/stack.dev-swarm.yml
+# The worker sleeps instead of computing, so a machine without the model weights or much RAM can run three.
+
+services:
+  worker:
+    image: ${REGISTRY}/imagegen-worker:${TAG}-fake       # the fake target of worker.Dockerfile
+    environment:
+      PIPELINE: fake
+      STEP_DELAY_SECONDS: "0"
+      FAKE_STEP_SECONDS: "1"
+    deploy:
+      resources:
+        reservations: {cpus: "0.25", memory: 512M}
+        limits: {cpus: "0.5", memory: 1G}
+
+  controller:
+    environment:
+      MAX_WORKERS: "3"
+      # Short enough that six 25-second jobs reach three workers and the scale-down is seen within minutes.
+      SCALE_UP_WAITING_PER_WORKER: "1"
+      COOLDOWN_S: "15"
+      SCALE_DOWN_IDLE_S: "60"

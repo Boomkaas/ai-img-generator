@@ -1,0 +1,19 @@
+# The images take only what they copy explicitly; everything else stays out of the build context.
+*
+!pyproject.toml
+!alembic.ini
+!api/
+!common/
+!controller/
+!worker/
+!migrations/
+!scripts/
+!infra/docker/
+!infra/nginx/
+!frontend/
+
+**/__pycache__/
+**/*.pyc
+scripts/check_*
+frontend/node_modules/
+frontend/dist/

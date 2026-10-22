@@ -1,9 +1,16 @@
+import re
+from pathlib import Path
+
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from common.config import Settings
 
 pytestmark = pytest.mark.unit
+
+STACK_FILE = Path(__file__).parents[2] / "infra" / "stack.yml"
+DURATION_UNITS = {"h": 3600, "m": 60, "s": 1}
 
 
 @pytest.fixture(autouse=True)
@@ -15,6 +22,30 @@ def clean_env(monkeypatch):
 
 def make(**overrides) -> Settings:
     return Settings(_env_file=None, JWT_SECRET="j" * 32, **overrides)
+
+
+def parse_duration(value: str) -> int:
+    """Seconds in a Compose duration such as "30m", "1h30m" or "1800s"."""
+    parts = re.findall(r"(\d+)([hms])", value)
+    assert parts and "".join(n + u for n, u in parts) == value, f"unsupported duration {value!r}"
+    return sum(int(n) * DURATION_UNITS[u] for n, u in parts)
+
+
+@pytest.mark.parametrize(
+    ("value", "seconds"), [("30m", 1800), ("1h30m", 5400), ("1800s", 1800), ("1h", 3600)]
+)
+def test_parse_duration(value, seconds):
+    assert parse_duration(value) == seconds
+
+
+def test_timeouts_are_in_order():
+    s = make()
+    assert s.MEASURED_MAX_RUNTIME_S < s.TASK_SOFT_TIME_LIMIT < s.TASK_TIME_LIMIT
+    assert s.TASK_TIME_LIMIT < s.BROKER_VISIBILITY_TIMEOUT
+    assert s.TASK_TIME_LIMIT < s.WORKER_STOP_GRACE_S
+    # Swarm kills a worker this long after SIGTERM; any shorter and scaling down could cut a job off.
+    grace = yaml.safe_load(STACK_FILE.read_text())["services"]["worker"]["stop_grace_period"]
+    assert parse_duration(grace) >= s.WORKER_STOP_GRACE_S
 
 
 def test_derived_timeouts_follow_the_formulas():
