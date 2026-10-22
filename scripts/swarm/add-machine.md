@@ -60,7 +60,9 @@ the deployed tag, `<node>` the new machine's hostname, and `<ip>` its private ad
    docker service scale imagegen_api=<number of app machines>
    ```
 
-   and set `API_REPLICAS` to the same number in `infra/.env.prod`.
+   and set `API_REPLICAS` to the same number in `infra/.env.prod`. Each API server holds up to 20 Postgres
+   connections and each worker one; the stack allows 200 (`max_connections` on the postgres service), enough
+   for about eight app machines. Beyond that, raise it there.
 
 7. **Raise MAX_WORKERS** by the number of workers that fit on the new machine, as calibration printed:
 

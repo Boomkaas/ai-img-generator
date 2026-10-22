@@ -6,7 +6,7 @@ COMPOSE_DEV := docker compose -f infra/compose.dev.yml
 .DEFAULT_GOAL := help
 .PHONY: help dev-up dev-down install lint fmt migrate \
         test-unit test-api test-integration test-lb test-e2e \
-        run-api run-worker run-controller images image-worker-real
+        run-api run-worker run-controller images image-worker-real constraints
 
 REGISTRY ?= local
 TAG      ?= dev
@@ -31,6 +31,10 @@ images:  ## Build the api, controller, nginx and fake worker images as $(REGISTR
 	$(BUILD) -f infra/docker/controller.Dockerfile -t $(REGISTRY)/imagegen-controller:$(TAG) .
 	$(BUILD) -f infra/docker/nginx.Dockerfile -t $(REGISTRY)/imagegen-nginx:$(TAG) .
 	$(BUILD) -f infra/docker/worker.Dockerfile --target fake -t $(REGISTRY)/imagegen-worker:$(TAG)-fake .
+
+constraints:  ## Pin the images' Python packages to the versions installed in .venv
+	{ echo "# Exact versions for the images, the ones the test suite last ran against. Regenerate with make constraints."; \
+	  $(BIN)/pip freeze --exclude-editable | grep -viE '^(imagegen|-e )'; } > infra/docker/constraints.txt
 
 image-worker-real:  ## Build the worker with torch and the model weights (several GB to download)
 	$(BUILD) -f infra/docker/worker.Dockerfile --target real -t $(REGISTRY)/imagegen-worker:$(TAG) .

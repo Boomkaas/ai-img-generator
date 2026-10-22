@@ -73,8 +73,8 @@ make image-worker-real TAG=1.0.0 REGISTRY=<registry>  # torch and the model weig
 ```
 
 - `infra/docker/` holds the Dockerfiles, `infra/nginx/` the load balancer config, `infra/stack.yml` the stack.
-- `scripts/swarm/` creates the cluster (`init-manager.sh`, `label-app-node.sh`, `create-secrets.sh`,
-  `prepull.sh`) and deploys it (`deploy.sh <tag>`, which reads `infra/.env.prod`; start from
+- `scripts/swarm/` creates the cluster (`init-manager.sh`, `label-app-node.sh`, `prepull.sh`, and
+  `create-secrets.sh`, which stores the certificate and every password as Swarm secrets) and deploys it (`deploy.sh <tag>`, which reads `infra/.env.prod`; start from
   `infra/.env.prod.example`). `scripts/swarm/add-machine.md` covers growing the cluster.
 - `infra/stack.dev-swarm.yml` is an override for trying the whole stack on one machine with the fake worker:
   `scripts/swarm/deploy.sh <tag> infra/stack.dev-swarm.yml`.

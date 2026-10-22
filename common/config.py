@@ -1,10 +1,13 @@
 """Every limit, timeout and connection setting in one place.
 
-Values come from environment variables and `.env`. The derived timeouts follow the chain below unless an
-environment variable of the same name overrides them; the validator refuses any configuration that breaks
-the order measured runtime < soft limit < hard limit < visibility timeout, hard limit < stop grace period.
+Values come from environment variables, `.env`, and under Swarm from secret files in /run/secrets named after
+the setting (DATABASE_URL, JWT_SECRET, ...), which keeps passwords out of the service definitions. The derived
+timeouts follow the chain below unless an environment variable of the same name overrides them; the validator
+refuses any configuration that breaks the order measured runtime < soft limit < hard limit < visibility
+timeout, hard limit < stop grace period.
 """
 
+import os
 import socket
 from functools import lru_cache
 from typing import Annotated, Literal
@@ -12,9 +15,16 @@ from typing import Annotated, Literal
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+SECRETS_DIR = "/run/secrets"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # Outside Swarm the directory doesn't exist, and pydantic-settings would warn about it on every load.
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+        secrets_dir=SECRETS_DIR if os.path.isdir(SECRETS_DIR) else None,
+    )
 
     # --- Connections ---
     DATABASE_URL: str = "postgresql+psycopg://imagegen:imagegen@localhost:5432/imagegen"
