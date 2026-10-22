@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Meter } from "../admin/Meter";
 import { Pill, type Tone } from "../admin/Pill";
-import { cancelAnyTask, getAdminOverview } from "../api/http";
+import { ApiError, cancelAnyTask, getAdminOverview } from "../api/http";
 import { openSocket } from "../api/socket";
 import type {
   AdminOverview,
@@ -21,28 +21,40 @@ const shortId = (id: string) => id.slice(0, 4);
 export function AdminPage() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [paused, setPaused] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let stopped = false;
-    let live = false;
+    let received = 0;
     let pausedTimer: ReturnType<typeof setTimeout> | undefined;
+
+    // A failed fetch is left to the socket, and the paused line shows if that stays quiet too. A 403 means
+    // the user was demoted since signing in; the server then also stops sending the overview.
+    const fetchOverview = () => {
+      const before = received;
+      getAdminOverview().then(
+        (fetched) => {
+          // An overview from the socket is newer than one fetched before it arrived.
+          if (!stopped && received === before) setOverview(fetched);
+        },
+        (error) => {
+          if (!stopped && error instanceof ApiError && error.status === 403) navigate("/", { replace: true });
+        },
+      );
+    };
     const expectOverview = () => {
       clearTimeout(pausedTimer);
-      pausedTimer = setTimeout(() => setPaused(true), ADMIN_PAUSED_S * 1000);
+      pausedTimer = setTimeout(() => {
+        setPaused(true);
+        fetchOverview();
+      }, ADMIN_PAUSED_S * 1000);
     };
 
     expectOverview();
-    // A failed first paint is left to the socket, and the paused line shows if that stays quiet too.
-    getAdminOverview().then(
-      (first) => {
-        // An overview from the socket is newer than a first paint that answered late.
-        if (!stopped && !live) setOverview(first);
-      },
-      () => undefined,
-    );
+    fetchOverview();
     const close = openSocket((message) => {
       if (message.type !== "admin") return;
-      live = true;
+      received += 1;
       setOverview(message);
       setPaused(false);
       expectOverview();
@@ -52,7 +64,7 @@ export function AdminPage() {
       clearTimeout(pausedTimer);
       close();
     };
-  }, []);
+  }, [navigate]);
 
   return (
     <main className="wide">
@@ -107,7 +119,7 @@ function Tasks({ tasks }: { tasks: TaskItem[] }) {
   const running = tasks.filter((task) => task.status === "running");
   const waiting = tasks
     .filter((task) => task.status === "queued")
-    .sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity));
+    .sort((a, b) => (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER));
   return (
     <section className="block" aria-labelledby="tasks-heading">
       <div className="block-head">
@@ -170,6 +182,7 @@ function TaskRow({ task }: { task: TaskItem }) {
       setStep("sent");
     } catch (failure) {
       setError(errorText(failure));
+      backFromAsking.current = true;
       setStep("idle");
     }
   }
@@ -183,8 +196,10 @@ function TaskRow({ task }: { task: TaskItem }) {
       <td>
         {running ? (
           <span className="mono">{task.worker_host ?? "—"}</span>
-        ) : (
+        ) : task.position !== null ? (
           <Pill>#{task.position} in queue</Pill>
+        ) : (
+          "—"
         )}
       </td>
       <td>{running && task.progress !== null ? <Meter percent={task.progress} /> : "—"}</td>

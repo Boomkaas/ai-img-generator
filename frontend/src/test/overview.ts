@@ -6,8 +6,8 @@ export function overview(fields: Partial<AdminOverview> = {}): AdminOverview {
     type: "admin",
     machines: [
       { name: "nodeA", role: "infra", cpu: 23.5, ram: 41.0, api: { sockets: 6, requests_per_min: 41 } },
-      { name: "nodeB", role: "app", cpu: 97.1, ram: 84.9, api: { sockets: 1, requests_per_min: 17 } },
-      { name: "nodeC", role: "app", cpu: 3.0, ram: 85.0, api: null },
+      { name: "nodeB", role: "app", cpu: 97.1, ram: 84.4, api: { sockets: 1, requests_per_min: 17 } },
+      { name: "nodeC", role: "app", cpu: 3.0, ram: 84.6, api: null },
     ],
     workers: [
       {
