@@ -41,6 +41,9 @@ services:
 
   postgres:
     image: postgres:16
+    # Each API replica may hold 20 connections (4 processes with a pool of 5), each worker 1; the default
+    # of 100 would run out at about four app machines.
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_USER: imagegen
       POSTGRES_PASSWORD: ${PG_PASSWORD}
