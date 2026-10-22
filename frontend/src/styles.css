@@ -318,6 +318,190 @@ button.entry {
   background: var(--danger);
 }
 
+.wide {
+  max-width: calc(1000px + 2 * var(--gap));
+  margin: 0 auto;
+  padding: 32px var(--gap);
+}
+
+.paused {
+  margin: 0 0 16px;
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.admin-head {
+  display: flex;
+  gap: var(--gap);
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 0 24px;
+  font-size: 14px;
+}
+
+.admin-head h1 {
+  margin: 0;
+  text-align: left;
+}
+
+.summary {
+  margin: 0 0 40px;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.summary-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: baseline;
+  margin: 0;
+}
+
+.summary-label {
+  font-weight: 600;
+}
+
+.num {
+  font: 300 24px/1 var(--display);
+  font-variant-numeric: tabular-nums;
+}
+
+.dim {
+  color: var(--dim);
+  font-size: 14px;
+}
+
+.alerts {
+  margin: 12px 0 0;
+  padding: 0;
+  color: var(--warn);
+  font-size: 14px;
+  list-style: none;
+}
+
+.alerts time {
+  margin-right: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.block {
+  margin: 0 0 40px;
+}
+
+.block-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  margin: 0 0 12px;
+}
+
+.table-scroll {
+  position: relative;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  padding: 10px 16px 10px 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+th:last-child,
+td:last-child {
+  padding-right: 0;
+}
+
+th {
+  color: var(--dim);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mono {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.pill-accent {
+  color: var(--accent);
+}
+
+.pill-dim {
+  color: var(--dim);
+}
+
+.pill-warn {
+  color: var(--warn);
+}
+
+.meter {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.meter-track {
+  width: 56px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.meter-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+
+.meter-warn {
+  color: var(--warn);
+}
+
+.meter-warn .meter-fill {
+  background: var(--warn);
+}
+
+.cell-error {
+  margin-left: 8px;
+  color: var(--danger);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 @keyframes fade {
   from {
     opacity: 0;

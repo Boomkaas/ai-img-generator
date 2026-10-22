@@ -11,3 +11,8 @@ export function formatClock(iso: string, now: Date = new Date()): string {
   if (at.toDateString() === now.toDateString()) return time;
   return `${at.toLocaleDateString([], { day: "numeric", month: "short" })}, ${time}`;
 }
+
+/** Time spent so far in whole minutes: "5 min", or "<1 min" during the first minute. */
+export function formatMinutes(seconds: number): string {
+  return seconds < 60 ? "<1 min" : `${Math.floor(seconds / 60)} min`;
+}

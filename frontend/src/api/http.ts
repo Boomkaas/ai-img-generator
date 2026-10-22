@@ -1,4 +1,4 @@
-import type { CancelOut, TaskOut, TaskPage, User } from "./types";
+import type { AdminOverview, CancelOut, TaskOut, TaskPage, User } from "./types";
 
 /** The server answered with an error status; `detail` is its sentence for the user, if it sent one. */
 export class ApiError extends Error {
@@ -118,6 +118,10 @@ export const getHistory = (before: string | null) =>
   request<TaskPage>("GET", before ? `/api/tasks?before=${encodeURIComponent(before)}` : "/api/tasks");
 
 export const imageUrl = (id: string) => `/api/tasks/${id}/image`;
+
+export const getAdminOverview = () => request<AdminOverview>("GET", "/api/admin/overview");
+
+export const cancelAnyTask = (id: string) => request<CancelOut>("DELETE", `/api/admin/tasks/${id}`);
 
 /**
  * Submit a prompt. The key is made once per click, so the one retry after a lost answer returns the task

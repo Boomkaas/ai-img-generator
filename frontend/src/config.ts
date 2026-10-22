@@ -11,3 +11,8 @@ export const RETRY_DELAYS_S = [1, 2, 5, 10];
 export function retryDelayMs(attempt: number): number {
   return (RETRY_DELAYS_S[Math.min(attempt, RETRY_DELAYS_S.length - 1)] ?? 10) * 1000;
 }
+
+// The overview arrives every 5 s; three missed in a row mean the live feed has stopped.
+export const ADMIN_PAUSED_S = 15;
+// Machine CPU or RAM at or above this is shown in the warn colour.
+export const LOAD_WARN_PERCENT = 85;
