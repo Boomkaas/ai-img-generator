@@ -4,18 +4,23 @@
 #
 # Placement: imagegen.infra=true marks machine A (Nginx, Redis, Postgres, MinIO, controller),
 # imagegen.app=true the machines that run API servers and workers. One machine may carry both.
+#
+# Passwords are Swarm secrets (scripts/swarm/create-secrets.sh), never environment variables, so they don't
+# show in docker service inspect. The app reads each from a file named after the setting it fills.
 
 x-app-env: &app_env
-  BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-  REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-  DATABASE_URL: postgresql://imagegen:${PG_PASSWORD}@postgres/imagegen
   S3_ENDPOINT: http://minio:9000
   S3_ACCESS_KEY: imagegen
-  S3_SECRET_KEY: ${MINIO_PASSWORD}
-  JWT_SECRET: ${JWT_SECRET}
   ALLOWED_ORIGINS: https://${DOMAIN}
   COOKIE_SECURE: "true"
   TZ: ${TZ:-UTC}
+
+x-app-secrets: &app_secrets
+  - {source: database_url, target: DATABASE_URL}
+  - {source: broker_url, target: BROKER_URL}
+  - {source: redis_url, target: REDIS_URL}
+  - {source: minio_password, target: S3_SECRET_KEY}
+  - {source: jwt_secret, target: JWT_SECRET}
 
 services:
   nginx:
@@ -34,7 +39,10 @@ services:
 
   redis:
     image: redis:7
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    # The config file holds only requirepass, which keeps the password off the command line.
+    command: ["redis-server", "/run/secrets/redis.conf", "--appendonly", "yes"]
+    secrets:
+      - {source: redis_conf, target: redis.conf}
     volumes: [redis-data:/data]
     deploy:
       placement: {constraints: [node.labels.imagegen.infra == true]}
@@ -46,8 +54,9 @@ services:
     command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_USER: imagegen
-      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
       POSTGRES_DB: imagegen
+    secrets: [pg_password]
     volumes: [pg-data:/var/lib/postgresql/data]
     deploy:
       placement: {constraints: [node.labels.imagegen.infra == true]}
@@ -57,7 +66,8 @@ services:
     command: ["server", "/data"]
     environment:
       MINIO_ROOT_USER: imagegen
-      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
+      MINIO_ROOT_PASSWORD_FILE: minio_password           # a name under /run/secrets
+    secrets: [minio_password]
     volumes: [minio-data:/data]
     deploy:
       placement: {constraints: [node.labels.imagegen.infra == true]}
@@ -67,6 +77,7 @@ services:
     image: ${REGISTRY}/imagegen-api:${TAG}
     command: ["sh", "-c", "alembic upgrade head && python -c 'from common import storage; storage.ensure_bucket()'"]
     environment: *app_env
+    secrets: *app_secrets
     healthcheck: {disable: true}                         # the image's check is for the API server
     deploy:
       placement: {constraints: [node.labels.imagegen.infra == true]}
@@ -84,6 +95,7 @@ services:
       <<: *app_env
       DB_POOL_SIZE: "5"
       MACHINE_NAME: "{{.Node.Hostname}}"
+    secrets: *app_secrets
     # Only whether the process answers at all: /api/health answers 503 while Postgres or Redis is down, and
     # restarting every API server then would only drop every WebSocket without bringing either back.
     healthcheck:
@@ -109,6 +121,7 @@ services:
       OMP_NUM_THREADS: "2"
       MKL_NUM_THREADS: "2"
       STEP_DELAY_SECONDS: "2"
+    secrets: *app_secrets
     # Celery's warm shutdown finishes the running job on SIGTERM; this must stay above TASK_TIME_LIMIT,
     # or scaling down could kill a job mid-run. Equals WORKER_STOP_GRACE_S; a unit test checks it.
     stop_grace_period: 30m
@@ -130,6 +143,7 @@ services:
       WORKER_SERVICE: imagegen_worker
       MIN_WORKERS: ${MIN_WORKERS:-1}
       MAX_WORKERS: ${MAX_WORKERS:-4}
+    secrets: *app_secrets
     volumes: ["/var/run/docker.sock:/var/run/docker.sock"]   # to change the worker count
     deploy:
       replicas: 1
@@ -150,3 +164,11 @@ configs:
 secrets:
   tls_cert: {external: true}
   tls_key: {external: true}
+  jwt_secret: {external: true, name: imagegen_jwt_secret}
+  pg_password: {external: true, name: imagegen_pg_password}
+  minio_password: {external: true, name: imagegen_minio_password}
+  redis_conf: {external: true, name: imagegen_redis_conf}
+  database_url: {external: true, name: imagegen_database_url}
+  redis_url: {external: true, name: imagegen_redis_url}
+  # The same value as redis_url, but its own secret: Swarm mounts one source only once per service.
+  broker_url: {external: true, name: imagegen_broker_url}

@@ -5,8 +5,8 @@
 #   scripts/swarm/deploy.sh 1.0.0
 #   scripts/swarm/deploy.sh dev infra/stack.dev-swarm.yml      (one-machine smoke run)
 #
-# Settings and secrets come from infra/.env.prod (ENV_FILE overrides the path); copy it from
-# infra/.env.prod.example.
+# Settings come from infra/.env.prod (ENV_FILE overrides the path); copy it from infra/.env.prod.example.
+# The passwords must already be Swarm secrets (scripts/swarm/create-secrets.sh).
 set -eu
 
 if [ $# -lt 1 ]; then
@@ -35,7 +35,7 @@ TAG=$1
 export TAG
 shift
 
-for name in REGISTRY DOMAIN REDIS_PASSWORD PG_PASSWORD MINIO_PASSWORD JWT_SECRET; do
+for name in REGISTRY DOMAIN; do
     eval "value=\${$name:-}"
     if [ -z "$value" ]; then
         echo "$name is empty in $env_file" >&2

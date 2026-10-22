@@ -120,6 +120,20 @@ def test_short_jwt_secret_is_refused():
         Settings(_env_file=None, JWT_SECRET="j" * 31)
 
 
+def test_secrets_are_read_from_files_named_after_the_setting(tmp_path):
+    (tmp_path / "DATABASE_URL").write_text("postgresql://imagegen:from-file@postgres/imagegen\n")
+    (tmp_path / "JWT_SECRET").write_text("s" * 32 + "\n")
+    s = Settings(_env_file=None, _secrets_dir=tmp_path)
+    assert s.DATABASE_URL == "postgresql://imagegen:from-file@postgres/imagegen"
+    assert s.JWT_SECRET == "s" * 32
+
+
+def test_environment_wins_over_a_secret_file(tmp_path, monkeypatch):
+    (tmp_path / "JWT_SECRET").write_text("f" * 32)
+    monkeypatch.setenv("JWT_SECRET", "e" * 32)
+    assert Settings(_env_file=None, _secrets_dir=tmp_path).JWT_SECRET == "e" * 32
+
+
 def test_list_settings_parse_from_env(monkeypatch):
     monkeypatch.setenv("ALLOWED_ORIGINS", "https://a.example, https://b.example")
     monkeypatch.setenv("ALLOWED_SIZES", "[256, 512]")
