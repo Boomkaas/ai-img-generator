@@ -6,7 +6,11 @@ COMPOSE_DEV := docker compose -f infra/compose.dev.yml
 .DEFAULT_GOAL := help
 .PHONY: help dev-up dev-down install lint fmt migrate \
         test-unit test-api test-integration test-lb test-e2e \
-        run-api run-worker run-controller
+        run-api run-worker run-controller images image-worker-real
+
+REGISTRY ?= local
+TAG      ?= dev
+BUILD    := docker build
 
 help:  ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -19,6 +23,17 @@ dev-up:  ## Start Postgres, Redis and MinIO; wait until healthy and the bucket e
 
 dev-down:  ## Stop the local services (data volumes are kept)
 	$(COMPOSE_DEV) down
+
+# --- Images -----------------------------------------------------------------
+
+images:  ## Build the api, controller, nginx and fake worker images as $(REGISTRY)/imagegen-*:$(TAG)
+	$(BUILD) -f infra/docker/api.Dockerfile -t $(REGISTRY)/imagegen-api:$(TAG) .
+	$(BUILD) -f infra/docker/controller.Dockerfile -t $(REGISTRY)/imagegen-controller:$(TAG) .
+	$(BUILD) -f infra/docker/nginx.Dockerfile -t $(REGISTRY)/imagegen-nginx:$(TAG) .
+	$(BUILD) -f infra/docker/worker.Dockerfile --target fake -t $(REGISTRY)/imagegen-worker:$(TAG)-fake .
+
+image-worker-real:  ## Build the worker with torch and the model weights (several GB to download)
+	$(BUILD) -f infra/docker/worker.Dockerfile --target real -t $(REGISTRY)/imagegen-worker:$(TAG) .
 
 # --- Python -----------------------------------------------------------------
 
