@@ -1,0 +1,147 @@
+# Deploy with scripts/swarm/deploy.sh <tag>, which loads infra/.env.prod and runs
+#   docker stack deploy -c infra/stack.yml imagegen
+# The stack name matters: the controller scales the service imagegen_worker.
+#
+# Placement: imagegen.infra=true marks machine A (Nginx, Redis, Postgres, MinIO, controller),
+# imagegen.app=true the machines that run API servers and workers. One machine may carry both.
+
+x-app-env: &app_env
+  BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+  REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+  DATABASE_URL: postgresql://imagegen:${PG_PASSWORD}@postgres/imagegen
+  S3_ENDPOINT: http://minio:9000
+  S3_ACCESS_KEY: imagegen
+  S3_SECRET_KEY: ${MINIO_PASSWORD}
+  JWT_SECRET: ${JWT_SECRET}
+  ALLOWED_ORIGINS: https://${DOMAIN}
+  COOKIE_SECURE: "true"
+  TZ: ${TZ:-UTC}
+
+services:
+  nginx:
+    image: ${REGISTRY}/imagegen-nginx:${TAG}            # nginx + nginx.conf + the built frontend
+    ports:
+      # Nginx runs unprivileged inside the container, so it listens on 8080 and 8443.
+      - {target: 8080, published: 80, mode: host}
+      - {target: 8443, published: 443, mode: host}
+    configs:
+      - {source: nginx_upstreams, target: /etc/nginx/upstreams.inc}
+    secrets:
+      - {source: tls_cert, target: tls_cert}
+      - {source: tls_key, target: tls_key, uid: "101", gid: "101", mode: 0400}
+    deploy:
+      placement: {constraints: [node.labels.imagegen.infra == true]}
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes: [redis-data:/data]
+    deploy:
+      placement: {constraints: [node.labels.imagegen.infra == true]}
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: imagegen
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: imagegen
+    volumes: [pg-data:/var/lib/postgresql/data]
+    deploy:
+      placement: {constraints: [node.labels.imagegen.infra == true]}
+
+  minio:
+    image: pgsty/minio                                   # community build: upstream stopped publishing images
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: imagegen
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
+    volumes: [minio-data:/data]
+    deploy:
+      placement: {constraints: [node.labels.imagegen.infra == true]}
+
+  # Runs once per deploy of a new image: database migrations, then the bucket for result images.
+  migrate:
+    image: ${REGISTRY}/imagegen-api:${TAG}
+    command: ["sh", "-c", "alembic upgrade head && python -c 'from common import storage; storage.ensure_bucket()'"]
+    environment: *app_env
+    healthcheck: {disable: true}                         # the image's check is for the API server
+    deploy:
+      placement: {constraints: [node.labels.imagegen.infra == true]}
+      # On a first deploy Postgres can take a minute or more to start (pulling, initialising); the retries
+      # spaced this far apart cover that.
+      restart_policy: {condition: on-failure, delay: 30s, max_attempts: 3}
+
+  api:
+    image: ${REGISTRY}/imagegen-api:${TAG}
+    ports:
+      # Host mode, one replica per machine: Nginx lists each app machine's IP:8000, and the routing mesh
+      # would forward between machines behind its back and hide a dead server.
+      - {target: 8000, published: 8000, mode: host}
+    environment:
+      <<: *app_env
+      DB_POOL_SIZE: "5"
+      MACHINE_NAME: "{{.Node.Hostname}}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      replicas: ${API_REPLICAS:-2}                       # one per app machine
+      placement:
+        constraints: [node.labels.imagegen.app == true]
+        max_replicas_per_node: 1
+      update_config: {order: stop-first}                 # the host port can't be held by two at once
+
+  worker:
+    image: ${REGISTRY}/imagegen-worker:${TAG}            # includes the model weights
+    hostname: "{{.Node.Hostname}}-worker-{{.Task.Slot}}" # what worker_host and the admin panel show
+    environment:
+      <<: *app_env
+      DB_POOL_SIZE: "1"
+      WORKER_THREADS: "2"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      STEP_DELAY_SECONDS: "2"
+    # Celery's warm shutdown finishes the running job on SIGTERM; this must stay above TASK_TIME_LIMIT,
+    # or scaling down could kill a job mid-run. Equals WORKER_STOP_GRACE_S; a unit test checks it.
+    stop_grace_period: 30m
+    deploy:
+      replicas: 1                                        # the controller changes this
+      placement: {constraints: [node.labels.imagegen.app == true]}
+      resources:
+        reservations: {cpus: "2", memory: 7G}            # measured peak at 768 px + 1 GB margin
+        limits: {cpus: "2", memory: 8G}
+      restart_policy: {condition: any}
+
+  controller:
+    image: ${REGISTRY}/imagegen-controller:${TAG}
+    environment:
+      <<: *app_env
+      DB_POOL_SIZE: "2"
+      MACHINE_NAME: "{{.Node.Hostname}}"
+      SCALER: swarm
+      WORKER_SERVICE: imagegen_worker
+      MIN_WORKERS: ${MIN_WORKERS:-1}
+      MAX_WORKERS: ${MAX_WORKERS:-4}
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]   # to change the worker count
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager, node.labels.imagegen.infra == true]
+
+volumes:
+  redis-data: {}
+  pg-data: {}
+  minio-data: {}
+
+configs:
+  # Configs can't change in place: adding a machine creates a new version and points this name at it.
+  nginx_upstreams:
+    external: true
+    name: ${NGINX_UPSTREAMS_CONFIG:-nginx_upstreams}
+
+secrets:
+  tls_cert: {external: true}
+  tls_key: {external: true}
