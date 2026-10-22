@@ -89,6 +89,11 @@ class Settings(BaseSettings):
     ESTIMATE_SAMPLE_SIZE: int = Field(50, ge=1)  # recent done tasks the median is taken over
     ESTIMATE_MIN_SAMPLES: int = Field(5, ge=1)  # fewer than this: use the calibrated value
 
+    # --- Calibration: how scripts/calibrate.py turns measurements into worker sizing ---
+    WORKER_MEMORY_MARGIN_GB: int = Field(1, ge=0)  # above the measured peak, for the memory reservation
+    APP_MACHINE_RESERVED_RAM_GB: int = Field(2, ge=0)  # kept for the OS and the API server
+    APP_MACHINE_RESERVED_CORES: int = Field(1, ge=0)  # kept free so pages and WebSockets stay responsive
+
     # --- Heartbeats and admin panel ---
     HEARTBEAT_INTERVAL_S: float = Field(5, gt=0)
     HEARTBEAT_TTL_S: int = Field(15, ge=1)  # a process that stops writing disappears after this
