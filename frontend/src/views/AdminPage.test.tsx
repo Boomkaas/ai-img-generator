@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ServerMessage } from "../api/types";
 import { json, stubFetch } from "../test/fetch";
@@ -24,8 +24,11 @@ afterEach(() => {
 
 function renderPage() {
   render(
-    <MemoryRouter>
-      <AdminPage />
+    <MemoryRouter initialEntries={["/admin"]}>
+      <Routes>
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/" element={<p>Generator</p>} />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -94,6 +97,23 @@ describe("first paint", () => {
   });
 });
 
+describe("waiting tasks", () => {
+  it("show a dash for a missing queue position and still sort", async () => {
+    const [waiting] = overview().tasks;
+    const tasks = [
+      { ...waiting!, id: "aaaa0000-0000-4000-8000-000000000000", position: null },
+      { ...waiting!, id: "bbbb0000-0000-4000-8000-000000000000", position: null },
+      { ...waiting!, position: 1 },
+    ];
+    stubFetch({ "GET /api/admin/overview": () => json(overview({ tasks })) });
+    renderPage();
+    await screen.findByRole("table", { name: "Tasks" });
+
+    const where = bodyRows("Tasks").map((row) => within(row).getAllByRole("cell")[3]!.textContent);
+    expect(where).toEqual(["#1 in queue", "—", "—"]);
+  });
+});
+
 describe("meters", () => {
   it("turn the warn colour at 85% and above", async () => {
     stubFetch({ "GET /api/admin/overview": () => json(overview()) });
@@ -103,7 +123,7 @@ describe("meters", () => {
     const [a, b, c] = bodyRows("Machines").map((row) => within(row).getAllByRole("cell"));
     expect(within(a![2]!).getByText("24%")).not.toHaveClass("meter-warn");
     expect(within(b![2]!).getByText("97%")).toHaveClass("meter-warn");
-    expect(within(b![3]!).getByText("85%")).not.toHaveClass("meter-warn"); // 84.9
+    expect(within(b![3]!).getByText("84%")).not.toHaveClass("meter-warn");
     expect(within(c![3]!).getByText("85%")).toHaveClass("meter-warn");
   });
 
@@ -162,6 +182,49 @@ describe("live updates", () => {
   });
 });
 
+describe("a user who is no longer an admin", () => {
+  it("is sent to the generator when the overview is refused", async () => {
+    stubFetch({ "GET /api/admin/overview": () => json({ detail: "Admins only" }, 403) });
+    renderPage();
+    expect(await screen.findByText("Generator")).toBeInTheDocument();
+  });
+
+  it("is sent to the generator when the check after a pause is refused", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let refused = false;
+    stubFetch({
+      "GET /api/admin/overview": () => (refused ? json({ detail: "Admins only" }, 403) : json(overview())),
+    });
+    renderPage();
+    await act(async () => undefined);
+    expect(screen.getByRole("heading", { name: "Admin" })).toBeInTheDocument();
+
+    refused = true;
+    await act(async () => vi.advanceTimersByTime(15_000));
+    await act(async () => undefined);
+    expect(screen.getByText("Generator")).toBeInTheDocument();
+  });
+
+  it("keeps the page when the check after a pause just fails", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let down = false;
+    stubFetch({
+      "GET /api/admin/overview": () => {
+        if (down) throw new TypeError("Failed to fetch");
+        return json(overview());
+      },
+    });
+    renderPage();
+    await act(async () => undefined);
+
+    down = true;
+    await act(async () => vi.advanceTimersByTime(15_000));
+    await act(async () => undefined);
+    expect(screen.getByText("Live data paused — reconnecting")).toBeInTheDocument();
+    expect(screen.getByText("2 running · 2 waiting")).toBeInTheDocument();
+  });
+});
+
 describe("cancelling", () => {
   it("asks inline, and No puts the row back", async () => {
     const fetch = stubFetch({ "GET /api/admin/overview": () => json(overview()) });
@@ -215,6 +278,6 @@ describe("cancelling", () => {
     await user.click(within(row).getByRole("button", { name: "Yes" }));
 
     expect(await within(row).findByRole("alert")).toHaveTextContent("Something went wrong on our side.");
-    expect(within(row).getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Cancel" })).toHaveFocus();
   });
 });
