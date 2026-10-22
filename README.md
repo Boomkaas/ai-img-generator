@@ -83,8 +83,8 @@ Every timeout and the worker sizing come from `scripts/calibrate.py`, run on eac
 worker image:
 
 ```bash
-docker run --rm --cpus 2 --memory 10g -e STEP_DELAY_SECONDS=2 <registry>/imagegen-worker:<tag> \
-    python -m scripts.calibrate
+docker run --rm --cpus 2 --memory 10g --hostname "$(hostname)" -e STEP_DELAY_SECONDS=2 \
+    <registry>/imagegen-worker:<tag> python -m scripts.calibrate
 ```
 
 It prints `MEASURED_MAX_RUNTIME_S` and `CALIBRATED_SECONDS_PER_COST_UNIT` for `common/config.py`, the worker's

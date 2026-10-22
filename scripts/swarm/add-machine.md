@@ -1,7 +1,7 @@
 # Adding an app machine
 
-The new machine needs Docker, NTP, and the firewall rules from the runbook: 2377/tcp, 7946/tcp+udp and
-4789/udp open to the other machines, and port 8000 reachable from machine A only. In the commands, `<tag>` is
+The new machine needs Docker, NTP (token expiry and task times are compared across machines), and a
+firewall that opens 2377/tcp, 7946/tcp+udp and 4789/udp to the other machines and port 8000 to machine A only. In the commands, `<tag>` is
 the deployed tag, `<node>` the new machine's hostname, and `<ip>` its private address.
 
 1. **Join.** On machine A, print the join command:
@@ -23,12 +23,13 @@ the deployed tag, `<node>` the new machine's hostname, and `<ip>` its private ad
 3. **Calibrate.** On the new machine:
 
    ```sh
-   docker run --rm --cpus 2 --memory 10g -e STEP_DELAY_SECONDS=2 <registry>/imagegen-worker:<tag> \
-       python -m scripts.calibrate
+   docker run --rm --cpus 2 --memory 10g --hostname "$(hostname)" -e STEP_DELAY_SECONDS=2 \
+       <registry>/imagegen-worker:<tag> python -m scripts.calibrate
    ```
 
    If its 768 px time is slower than the configured `MEASURED_MAX_RUNTIME_S`, it is now the slowest machine:
-   update the timeouts as the runbook's calibration section describes before going on. Note the number of
+   put its `MEASURED_MAX_RUNTIME_S` and `CALIBRATED_SECONDS_PER_COST_UNIT` into `common/config.py` and its
+   `stop_grace_period` into `infra/stack.yml`, then rebuild and redeploy before going on. Note the number of
    workers that fit.
 
 4. **Label.** On machine A:
