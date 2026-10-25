@@ -132,7 +132,15 @@ class Settings(BaseSettings):
     COOLDOWN_S: int = Field(120, ge=0)
     STARTUP_TIMEOUT_S: int = Field(600, gt=0)
     SCALE_DOWN_IDLE_S: int = Field(300, ge=0)
-    ALERT_WEBHOOK_URL: str = ""
+
+    # --- Alerts ---
+    ALERT_WEBHOOK_URL: str = ""  # Slack-compatible: gets {"text": ...}; empty sends nothing
+    ALERT_WEBHOOK_TIMEOUT_S: float = Field(3, gt=0)
+    ALERT_REPEAT_AFTER_S: int = Field(30 * 60, ge=1)  # the same message is sent at most this often
+    ALERT_AT_MAX_WORKERS_S: int = Field(15 * 60, gt=0)
+    ALERT_QUEUE_FULL_S: int = Field(10 * 60, gt=0)
+    ALERT_WORKER_STARTS: int = Field(3, ge=1)  # more starts than this on one machine within the window
+    ALERT_WORKER_STARTS_WINDOW_S: int = Field(10 * 60, gt=0)
 
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod

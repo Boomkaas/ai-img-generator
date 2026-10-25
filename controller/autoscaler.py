@@ -71,6 +71,8 @@ def autoscale_tick(now: float, state: ControllerState) -> None:
 def _change(now: float, state: ControllerState, old: int, new: int, ready: int, what: str) -> None:
     state.scaler.set_replicas(new)
     state.last_scale_at = now
+    # A worker that never came up, or one being removed, will never show up as launched.
+    state.workers_launched = state.workers_launched + new - old if new > old else 0
     action = f"{what} ({old} → {new}) at {time.strftime('%H:%M', time.localtime(now))}"
     log.info("%s", action)
     live.save_autoscaler_state(desired=new, starting=max(new - ready, 0), last_action=action)

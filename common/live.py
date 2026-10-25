@@ -5,9 +5,12 @@ Postgres is. Everything in Redis either expires or is rewritten every few second
 a few seconds of stale numbers.
 """
 
+import hashlib
+import json
 import logging
 import threading
 import time
+import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -67,6 +70,11 @@ def api_key(machine: str, pid: int) -> str:
 
 def machine_key(name: str) -> str:
     return f"{_MACHINE_PREFIX}{name}"
+
+
+def alert_sent_key(message: str) -> str:
+    """Set while `message` must not reach the webhook again."""
+    return f"alert:sent:{hashlib.sha256(message.encode()).hexdigest()[:16]}"
 
 
 # --- Clients ------------------------------------------------------------------------------------------------
@@ -393,12 +401,38 @@ def autoscaler_state() -> dict:
 
 
 def alert(message: str) -> None:
-    """Record an alert for the admin panel, keeping only the newest MAX_ALERTS."""
+    """Record an alert for the admin panel, keeping only the newest MAX_ALERTS, and send it to the webhook."""
+    settings = get_settings()
     entry = Alert(at=datetime.now(UTC), message=message).model_dump_json()
     pipe = client().pipeline()
     pipe.lpush(ALERTS_KEY, entry)
-    pipe.ltrim(ALERTS_KEY, 0, get_settings().MAX_ALERTS - 1)
+    pipe.ltrim(ALERTS_KEY, 0, settings.MAX_ALERTS - 1)
     pipe.execute()
+    if not settings.ALERT_WEBHOOK_URL:
+        return
+    # The marker lives in Redis, so a restarted controller doesn't send the same message again right away.
+    if client().set(alert_sent_key(message), "1", nx=True, ex=settings.ALERT_REPEAT_AFTER_S):
+        # A thread, so a slow or dead webhook never holds up the controller's tick.
+        threading.Thread(
+            target=post_alert,
+            args=(settings.ALERT_WEBHOOK_URL, message, settings.ALERT_WEBHOOK_TIMEOUT_S),
+            name="alert-webhook",
+            daemon=True,
+        ).start()
+
+
+def post_alert(url: str, message: str, timeout: float) -> None:
+    request = urllib.request.Request(
+        url,
+        data=json.dumps({"text": message}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            response.read()
+    except (OSError, ValueError) as exc:
+        log.warning("could not send the alert to the webhook: %s", exc)
 
 
 def recent_alerts() -> list[Alert]:
