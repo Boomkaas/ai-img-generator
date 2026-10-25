@@ -113,7 +113,9 @@ jobs:
           source: .
           files: infra/compose.test.yml
           load: true
+          # Bake reads the compose file's "context: .." from the working directory, not from infra/.
           set: |
+            *.context=.
             *.cache-from=type=gha,scope=test-stack
             *.cache-to=type=gha,scope=test-stack,mode=max
       - name: Playwright version
