@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 from celery.exceptions import SoftTimeLimitExceeded
+from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy.exc import OperationalError
 
 from common import db
@@ -251,6 +252,18 @@ def test_redis_failing_at_cleanup_still_leaves_the_worker_idle(monkeypatch, fake
     run(task_id)
     assert fake_live.states[-1] == ("idle", None)
     assert fake_live.finals == ["done"]
+
+
+def test_redis_down_during_the_job_still_finishes_it(monkeypatch, fake_db, fake_live, fake_storage, task_id):
+    def unreachable(*args, **kwargs):
+        raise RedisConnectionError("redis unreachable")
+
+    monkeypatch.setattr(fake_live, "publish_progress", unreachable)
+    monkeypatch.setattr(fake_live, "cancel_requested", unreachable)
+    run(task_id)
+    assert fake_db.finishes[-1]["status"] == "done"
+    assert f"results/{task_id}.png" in fake_storage.objects
+    assert_cleaned_up(fake_live, task_id, "done")
 
 
 def test_pipeline_module_imports_without_torch():
