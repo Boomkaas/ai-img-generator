@@ -32,3 +32,14 @@ def test_app_services_get_every_setting_kept_in_a_secret(service):
 def test_every_secret_a_service_uses_is_declared():
     used = {ref["source"] for service in STACK["services"] for ref in secret_refs(service)}
     assert used <= set(STACK["secrets"])
+
+
+def test_backups_run_next_to_postgres_and_keep_a_week():
+    backup = STACK["services"]["backup"]
+    # pg_dump refuses a server newer than itself, so the backup uses the database's own image.
+    assert backup["image"] == STACK["services"]["postgres"]["image"]
+    assert backup["deploy"]["placement"] == STACK["services"]["postgres"]["deploy"]["placement"]
+    assert backup["environment"]["BACKUP_KEEP"] == "7"
+    assert "pg_dump -Fc" in backup["command"][-1]
+    assert "backups:/backups" in backup["volumes"]
+    assert "backups" in STACK["volumes"]

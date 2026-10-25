@@ -72,6 +72,43 @@ services:
     deploy:
       placement: {constraints: [node.labels.imagegen.infra == true]}
 
+  # pg_dump once a night at BACKUP_AT into the backups volume, keeping the newest BACKUP_KEEP dumps.
+  # scripts/restore_check.sh restores the newest one into a scratch database to prove it works.
+  backup:
+    image: postgres:16
+    environment:
+      PGHOST: postgres
+      PGUSER: imagegen
+      PGDATABASE: imagegen
+      BACKUP_AT: "03:00"
+      BACKUP_KEEP: "7"
+      TZ: ${TZ:-UTC}
+    secrets: [pg_password]
+    volumes: [backups:/backups]
+    # A dump is written under a temporary name and renamed when complete, so a restore never picks up half
+    # of one.
+    command:
+      - sh
+      - -c
+      - |
+        export PGPASSWORD="$$(cat /run/secrets/pg_password)"
+        while :; do
+          now=$$(date +%s)
+          next=$$(date -d "$$BACKUP_AT" +%s)
+          [ "$$next" -gt "$$now" ] || next=$$(date -d "tomorrow $$BACKUP_AT" +%s)
+          sleep $$((next - now))
+          name=/backups/imagegen-$$(date +%Y%m%d-%H%M%S).dump
+          if pg_dump -Fc -f "$$name.part" && mv "$$name.part" "$$name"; then
+            echo "backup: wrote $$name"
+            ls -1t /backups/imagegen-*.dump | tail -n +$$((BACKUP_KEEP + 1)) | xargs -r rm -f --
+          else
+            echo "backup: pg_dump failed" >&2
+            rm -f "$$name.part"
+          fi
+        done
+    deploy:
+      placement: {constraints: [node.labels.imagegen.infra == true]}
+
   # Runs once per deploy of a new image: database migrations, then the bucket for result images.
   migrate:
     image: ${REGISTRY}/imagegen-api:${TAG}
@@ -143,6 +180,7 @@ services:
       WORKER_SERVICE: imagegen_worker
       MIN_WORKERS: ${MIN_WORKERS:-1}
       MAX_WORKERS: ${MAX_WORKERS:-4}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
     secrets: *app_secrets
     volumes: ["/var/run/docker.sock:/var/run/docker.sock"]   # to change the worker count
     deploy:
@@ -154,6 +192,7 @@ volumes:
   redis-data: {}
   pg-data: {}
   minio-data: {}
+  backups: {}
 
 configs:
   # Configs can't change in place: adding a machine creates a new version and points this name at it.
