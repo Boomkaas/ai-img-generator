@@ -12,8 +12,8 @@ env:
   PYTHON_VERSION: "3.12"
   PIPELINE: fake
 
-# Later steps add jobs (integration, lb, e2e). Each Python job installs with `make install`
-# and runs the matching `make` target, so CI and local runs stay identical.
+# Each Python job installs with `make install` and runs the matching `make` target, so CI and local runs stay
+# identical.
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -48,7 +48,7 @@ jobs:
         run: make test-unit
 
   api:
-    # testcontainers starts Postgres (later also Redis and MinIO) on the runner's Docker.
+    # testcontainers starts Postgres, Redis and MinIO on the runner's Docker.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -83,3 +83,57 @@ jobs:
         run: npm test
       - name: Build
         run: npx vite build
+
+  # The whole system in Docker Compose (infra/compose.test.yml) with the fake worker. These take minutes, so
+  # they run where a change is about to be integrated: PRs into develop, and develop and main themselves.
+  stack:
+    name: ${{ matrix.suite }}
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'develop')
+      || (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [integration, lb, e2e]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install
+        run: make install
+      - uses: docker/setup-buildx-action@v3
+      # The layers, the frontend's npm ci among them, come from the GitHub Actions cache.
+      - name: Build the test stack's images
+        uses: docker/bake-action@v6
+        with:
+          source: .
+          files: infra/compose.test.yml
+          load: true
+          set: |
+            *.cache-from=type=gha,scope=test-stack
+            *.cache-to=type=gha,scope=test-stack,mode=max
+      - name: Playwright version
+        if: matrix.suite == 'e2e'
+        id: playwright
+        run: echo "version=$(.venv/bin/python -c 'import playwright._repo_version as v; print(v.version)')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        if: matrix.suite == 'e2e'
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ steps.playwright.outputs.version }}
+      - name: Chromium
+        if: matrix.suite == 'e2e'
+        run: .venv/bin/playwright install --with-deps --only-shell chromium
+      - name: Tests
+        run: make test-${{ matrix.suite }} NO_BUILD=1
+      # The compose logs, and for e2e the Playwright trace of each failed test.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ${{ matrix.suite }}-results
+          path: test-results/
+          if-no-files-found: ignore
