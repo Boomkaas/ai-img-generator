@@ -2,10 +2,11 @@ PY_VERSION ?= python3.12
 VENV       ?= .venv
 BIN        := $(VENV)/bin
 COMPOSE_DEV := docker compose -f infra/compose.dev.yml
+COMPOSE_TEST := docker compose -p imagegen-test -f infra/compose.test.yml
 
 .DEFAULT_GOAL := help
 .PHONY: help dev-up dev-down install lint fmt migrate \
-        test-unit test-api test-integration test-lb test-e2e \
+        test-unit test-api test-integration test-lb test-e2e test-images browsers \
         run-api run-worker run-controller images image-worker-real constraints
 
 REGISTRY ?= local
@@ -67,14 +68,24 @@ test-unit:  ## Unit tests (nothing external)
 test-api:  ## API tests (Postgres, Redis, MinIO via testcontainers; needs Docker)
 	$(BIN)/pytest -m api
 
-test-integration:  ## Worker integration tests (compose test stack)
-	@echo "test-integration: not implemented yet"
+# The stack tests start infra/compose.test.yml themselves and remove it afterwards (STACK_KEEP=1 leaves it
+# running for the next run). NO_BUILD=1 skips rebuilding its images, for CI, which builds them with a cache.
+STACK_IMAGES := $(if $(NO_BUILD),,test-images)
 
-test-lb:  ## Load-balancer tests (compose test stack with Nginx)
-	@echo "test-lb: not implemented yet"
+test-images:  ## Build the images of the compose test stack
+	$(COMPOSE_TEST) build
 
-test-e2e:  ## Playwright end-to-end tests
-	@echo "test-e2e: not implemented yet"
+test-integration: $(STACK_IMAGES)  ## Worker integration tests (compose test stack)
+	$(BIN)/pytest -m integration
+
+test-lb: $(STACK_IMAGES)  ## Load-balancer tests (compose test stack with Nginx)
+	$(BIN)/pytest -m lb
+
+browsers:  ## Download the Chromium the end-to-end tests drive
+	$(BIN)/playwright install chromium
+
+test-e2e: $(STACK_IMAGES)  ## Playwright end-to-end tests in Chromium (compose test stack)
+	$(BIN)/pytest -m e2e
 
 # --- Run --------------------------------------------------------------------
 
