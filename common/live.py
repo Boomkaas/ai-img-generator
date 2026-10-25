@@ -27,6 +27,8 @@ log = logging.getLogger(__name__)
 # --- Keys and channels --------------------------------------------------------------------------------------
 
 GENERATION_QUEUE = "image_generation"  # the Celery queue, a Redis list under this name
+# kombu's Redis transport moves a message here when a worker takes it, and deletes it on the acknowledgement.
+BROKER_UNACKED_KEYS = ("unacked", "unacked_index")
 SYSTEM_CHANNEL = "system"
 ADMIN_CHANNEL = "admin"
 AUTOSCALER_KEY = "controller:autoscaler"

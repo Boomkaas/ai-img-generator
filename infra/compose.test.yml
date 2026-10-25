@@ -1,0 +1,186 @@
+# The whole system on one machine for the integration, load-balancer and end-to-end tests:
+#   make test-integration / test-lb / test-e2e
+# The tests start it as project imagegen-test and remove it afterwards. Two API servers sit behind Nginx, and
+# two workers run the fake pipeline. Timeouts are shortened so a lost worker or a stuck cancel shows within
+# seconds, and sized for 25-second fake jobs.
+name: imagegen-test
+
+x-app-env: &app_env
+  DATABASE_URL: postgresql+psycopg://imagegen:imagegen@postgres:5432/imagegen
+  BROKER_URL: redis://redis:6379/0
+  REDIS_URL: redis://redis:6379/0
+  S3_ENDPOINT: http://minio:9000
+  S3_ACCESS_KEY: imagegen
+  S3_SECRET_KEY: imagegen-test-secret
+  S3_BUCKET: imagegen
+  JWT_SECRET: test-only-jwt-secret-0123456789abcdef
+  # The tests also call the API servers directly over plain HTTP, where a Secure cookie is never sent.
+  COOKIE_SECURE: "false"
+  ALLOWED_ORIGINS: https://localhost:8443
+  MEASURED_MAX_RUNTIME_S: "30"
+  CALIBRATED_SECONDS_PER_COST_UNIT: "25"
+  WORKER_STOP_GRACE_S: "120"              # the worker's stop_grace_period
+  HEARTBEAT_INTERVAL_S: "1"
+  HEARTBEAT_TTL_S: "5"
+  CONTROLLER_TICK_S: "2"
+  ORPHAN_AFTER_S: "10"
+  FORCE_STOP_AFTER_S: "10"
+
+x-api: &api
+  image: imagegen-test-api
+  pull_policy: never
+  command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2",
+            "--ws-ping-interval", "25", "--ws-ping-timeout", "20",
+            "--proxy-headers", "--forwarded-allow-ips", "*"]
+  healthcheck:
+    test: ["CMD", "python", "-c", "import http.client as h; c = h.HTTPConnection('127.0.0.1', 8000, timeout=4); c.request('GET', '/api/health'); c.getresponse()"]
+    interval: 2s
+    timeout: 5s
+    retries: 15
+  depends_on:
+    migrate: {condition: service_completed_successfully}
+    redis: {condition: service_healthy}
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: imagegen
+      POSTGRES_PASSWORD: imagegen
+      POSTGRES_DB: imagegen
+    command: ["postgres", "-c", "fsync=off"]
+    tmpfs: [/var/lib/postgresql/data]
+    ports: ["5442:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U imagegen -d imagegen"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  # The data lives in the image's anonymous volume, which a restart keeps and a recreate with
+  # --renew-anon-volumes throws away.
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6389:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    image: pgsty/minio
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: imagegen
+      MINIO_ROOT_PASSWORD: imagegen-test-secret
+    tmpfs: [/data]
+    ports: ["9010:9000"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    image: imagegen-test-api
+    pull_policy: never
+    command: ["sh", "-c", "alembic upgrade head && python -c 'from common import storage; storage.ensure_bucket()'"]
+    environment: *app_env
+    healthcheck: {disable: true}
+    depends_on:
+      postgres: {condition: service_healthy}
+      minio: {condition: service_healthy}
+
+  # A self-signed certificate for Nginx, in the file names the stack's Swarm secrets have.
+  certs:
+    image: imagegen-test-api
+    pull_policy: never
+    user: root
+    command:
+      - sh
+      - -c
+      - >
+        openssl req -x509 -newkey rsa:2048 -nodes -days 7 -subj /CN=localhost
+        -addext subjectAltName=DNS:localhost,IP:127.0.0.1
+        -keyout /certs/tls_key -out /certs/tls_cert 2> /dev/null &&
+        chown 101:101 /certs/tls_key && chmod 400 /certs/tls_key
+    volumes: [certs:/certs]
+    healthcheck: {disable: true}
+
+  api_a:
+    <<: *api
+    build:
+      context: ..
+      dockerfile: infra/docker/api.Dockerfile
+    environment:
+      <<: *app_env
+      MACHINE_NAME: api-a
+    ports: ["8001:8000"]
+
+  api_b:
+    <<: *api
+    environment:
+      <<: *app_env
+      MACHINE_NAME: api-b
+    ports: ["8002:8000"]
+
+  # Each replica's host name is its container id, which is what worker_host and the admin page show.
+  worker:
+    image: imagegen-test-worker
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: infra/docker/worker.Dockerfile
+      target: fake
+    environment:
+      <<: *app_env
+      MACHINE_NAME: app
+      DB_POOL_SIZE: "1"
+      FAKE_STEP_SECONDS: "1"
+    stop_grace_period: 2m
+    deploy:
+      replicas: 2
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+
+  controller:
+    image: imagegen-test-controller
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: infra/docker/controller.Dockerfile
+    environment:
+      <<: *app_env
+      MACHINE_NAME: infra
+      DB_POOL_SIZE: "2"
+      SCALER: none
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+
+  nginx:
+    image: imagegen-test-nginx
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: infra/docker/nginx.Dockerfile
+    ports: ["8443:8443", "8080:8080"]
+    configs:
+      - {source: upstreams, target: /etc/nginx/upstreams.inc}
+    volumes: [certs:/run/secrets:ro]
+    depends_on:
+      certs: {condition: service_completed_successfully}
+      api_a: {condition: service_healthy}
+      api_b: {condition: service_healthy}
+
+configs:
+  upstreams:
+    content: |
+      server api_a:8000 max_fails=3 fail_timeout=10s;
+      server api_b:8000 max_fails=3 fail_timeout=10s;
+
+volumes:
+  certs: {}
