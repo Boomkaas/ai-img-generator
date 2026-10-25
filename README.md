@@ -23,6 +23,27 @@ If a host port is already taken (for example by a local Postgres), override it:
 
 `make help` lists every target.
 
+## Tests
+
+| Command | What runs | Needs |
+|---|---|---|
+| `make test-unit` | pure functions | nothing |
+| `make test-api` | the API in-process against Postgres, Redis and MinIO from testcontainers | Docker |
+| `make test-integration` | real worker containers with the fake pipeline: progress, cancel, crashes, Redis restart | Docker |
+| `make test-lb` | two API servers behind Nginx on `https://localhost:8443`: cookies, spreading, failover, WebSockets | Docker |
+| `make test-e2e` | the user and admin pages in Chromium, at desktop width and at 360 px | Docker, `make browsers` |
+
+The last three build the images and start `infra/compose.test.yml` (project `imagegen-test`) themselves, and
+remove it afterwards. It publishes ports 8001, 8002, 8443, 8080, 5442, 6389 and 9010, which must be free.
+`STACK_KEEP=1` leaves the stack running, so the next run starts in seconds; `docker compose -p imagegen-test
+down -v` removes it. After a failure, `test-results/compose.log` holds every container's log and
+`test-results/e2e/` the Playwright trace of each failed browser test (`.venv/bin/playwright show-trace <file>`).
+Where Playwright's own Chromium can't run, point `CHROMIUM_PATH` at an installed one.
+
+The tests that need a real cluster run by hand: `tests/load/locustfile.py` (shown against actual waiting
+times), `scripts/chaos.sh` (killing a worker, an API server and the controller) and `scripts/autoscale_check.sh`
+(a burst up to `MAX_WORKERS` and back). The top of each file says how to run it.
+
 ## Frontend
 
 Requires Node 22. With `make run-api`, `make run-worker` and `make run-controller` running:
@@ -96,6 +117,8 @@ It prints `MEASURED_MAX_RUNTIME_S` and `CALIBRATED_SECONDS_PER_COST_UNIT` for `c
 Set these by hand on GitHub (Settings → Branches / General):
 
 - Protect `main` and `develop`: no direct pushes, changes only through pull requests.
-- Require the CI status checks `lint` and `unit` to pass before merging.
+- Require the CI status checks `lint`, `unit`, `api` and `frontend` to pass before merging into `develop` and
+  `main`, and also `integration`, `lb` and `e2e`, which run on pull requests into `develop` and on pushes to
+  `develop` and `main`.
 - Require at least one approving review.
 - Optional: enable "Automatically delete head branches".
