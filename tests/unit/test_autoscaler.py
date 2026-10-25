@@ -293,11 +293,25 @@ def test_swarm_scaler_reads_the_replica_count():
     client.services.get.assert_called_with("imagegen_worker")
 
 
-def test_swarm_scaler_scales_the_service():
-    service = MagicMock()
-    scaler, _ = swarm_with(service)
+def test_swarm_scaler_changes_only_the_replica_count():
+    template = {"ContainerSpec": {"Image": "imagegen-worker:1.0.0"}, "Placement": {"Constraints": ["a"]}}
+    spec = {"Name": "imagegen_worker", "Labels": {"l": "1"}, "TaskTemplate": template,
+            "Mode": {"Replicated": {"Replicas": 1}}}  # fmt: skip
+    service = MagicMock(id="svc", version=41, attrs={"Spec": spec})
+    scaler, client = swarm_with(service)
     scaler.set_replicas(2)
-    service.scale.assert_called_once_with(2)
+    service.scale.assert_not_called()  # it would send Docker's defaults and restart every worker
+    client.api.update_service.assert_called_once_with(
+        "svc",
+        41,
+        name="imagegen_worker",
+        labels={"l": "1"},
+        task_template=template,
+        mode={"Replicated": {"Replicas": 2}},
+        update_config=None,
+        rollback_config=None,
+        endpoint_spec=None,
+    )
 
 
 def test_swarm_scaler_missing_service_is_a_clear_error():

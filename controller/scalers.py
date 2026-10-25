@@ -67,7 +67,22 @@ class SwarmScaler:
             raise ScalerError(f"{self.service} is not a replicated service") from exc
 
     def set_replicas(self, n: int) -> None:
-        self._service().scale(n)
+        # Service.scale() sends the spec back with Docker's defaults filled in, which Swarm takes for a
+        # changed task template and answers by replacing every running worker. Only the replica count may
+        # change.
+        service = self._service()
+        spec = service.attrs["Spec"]
+        self.client.api.update_service(
+            service.id,
+            service.version,
+            name=spec["Name"],
+            labels=spec.get("Labels"),
+            task_template=spec["TaskTemplate"],
+            mode={"Replicated": {"Replicas": n}},
+            update_config=spec.get("UpdateConfig"),
+            rollback_config=spec.get("RollbackConfig"),
+            endpoint_spec=spec.get("EndpointSpec"),
+        )
 
 
 def from_settings() -> Scaler:
