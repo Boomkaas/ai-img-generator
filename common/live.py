@@ -5,9 +5,12 @@ Postgres is. Everything in Redis either expires or is rewritten every few second
 a few seconds of stale numbers.
 """
 
+import hashlib
+import json
 import logging
 import threading
 import time
+import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -67,6 +70,11 @@ def api_key(machine: str, pid: int) -> str:
 
 def machine_key(name: str) -> str:
     return f"{_MACHINE_PREFIX}{name}"
+
+
+def alert_sent_key(message: str) -> str:
+    """Set while `message` must not reach the webhook again."""
+    return f"alert:sent:{hashlib.sha256(message.encode()).hexdigest()[:16]}"
 
 
 # --- Clients ------------------------------------------------------------------------------------------------
@@ -173,6 +181,7 @@ class WorkerHeartbeat:
     state: WorkerState
     task_id: str | None
     since: float  # epoch seconds of the last state change
+    started: float  # epoch seconds the worker process started; a restart under the same name changes it
     machine: str
     machine_cpu: float
     machine_ram: float
@@ -234,6 +243,7 @@ def _write_worker_heartbeat(host: str) -> None:
                 "state": current["state"],
                 "task_id": current["task_id"],
                 "since": current["since"],
+                "started": current["started"],
                 "machine": machine_of(host),
                 **_machine_figures(),
                 "rss_mb": psutil.Process().memory_info().rss // 2**20,
@@ -267,11 +277,13 @@ def start_heartbeat(
 ) -> Heartbeat:
     """Write the worker's heartbeat now and then every `interval` seconds from a daemon thread."""
     settings = get_settings()
+    now = time.time()
     with _workers_lock:
         _workers[host] = {
             "state": state,
             "task_id": "",
-            "since": time.time(),
+            "since": now,
+            "started": now,
             "ttl": ttl or settings.HEARTBEAT_TTL_S,
         }
     _write_worker_heartbeat(host)
@@ -283,10 +295,17 @@ def start_heartbeat(
 def set_worker_state(host: str, state: WorkerState, task_id=None) -> None:
     """Change the worker's state and write the heartbeat at once instead of within `interval`."""
     task_id = str(task_id) if task_id else ""
+    now = time.time()
     with _workers_lock:
         current = _workers.setdefault(
             host,
-            {"state": state, "task_id": task_id, "since": time.time(), "ttl": get_settings().HEARTBEAT_TTL_S},
+            {
+                "state": state,
+                "task_id": task_id,
+                "since": now,
+                "started": now,
+                "ttl": get_settings().HEARTBEAT_TTL_S,
+            },
         )
         if (current["state"], current["task_id"]) != (state, task_id):
             current.update(state=state, task_id=task_id, since=time.time())
@@ -309,6 +328,8 @@ def worker_heartbeats() -> list[WorkerHeartbeat]:
             state=data["state"],
             task_id=data["task_id"] or None,
             since=float(data["since"]),
+            # A worker of an older image writes no start time; its first state change stands in for it.
+            started=float(data.get("started") or data["since"]),
             machine=data["machine"],
             machine_cpu=float(data["machine_cpu"]),
             machine_ram=float(data["machine_ram"]),
@@ -393,12 +414,38 @@ def autoscaler_state() -> dict:
 
 
 def alert(message: str) -> None:
-    """Record an alert for the admin panel, keeping only the newest MAX_ALERTS."""
+    """Record an alert for the admin panel, keeping only the newest MAX_ALERTS, and send it to the webhook."""
+    settings = get_settings()
     entry = Alert(at=datetime.now(UTC), message=message).model_dump_json()
     pipe = client().pipeline()
     pipe.lpush(ALERTS_KEY, entry)
-    pipe.ltrim(ALERTS_KEY, 0, get_settings().MAX_ALERTS - 1)
+    pipe.ltrim(ALERTS_KEY, 0, settings.MAX_ALERTS - 1)
     pipe.execute()
+    if not settings.ALERT_WEBHOOK_URL:
+        return
+    # The marker lives in Redis, so a restarted controller doesn't send the same message again right away.
+    if client().set(alert_sent_key(message), "1", nx=True, ex=settings.ALERT_REPEAT_AFTER_S):
+        # A thread, so a slow or dead webhook never holds up the controller's tick.
+        threading.Thread(
+            target=post_alert,
+            args=(settings.ALERT_WEBHOOK_URL, message, settings.ALERT_WEBHOOK_TIMEOUT_S),
+            name="alert-webhook",
+            daemon=True,
+        ).start()
+
+
+def post_alert(url: str, message: str, timeout: float) -> None:
+    request = urllib.request.Request(
+        url,
+        data=json.dumps({"text": message}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            response.read()
+    except (OSError, ValueError) as exc:
+        log.warning("could not send the alert to the webhook: %s", exc)
 
 
 def recent_alerts() -> list[Alert]:

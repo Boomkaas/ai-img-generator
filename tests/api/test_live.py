@@ -1,3 +1,6 @@
+import http.server
+import json
+import threading
 import time
 from uuid import uuid4
 
@@ -174,6 +177,26 @@ def test_since_only_moves_when_the_state_changes(redis_live):
     assert live.worker_heartbeats()[0].since > first
 
 
+def test_started_stays_through_state_changes_and_moves_on_a_restart(redis_live):
+    host = f"nodeB-worker-{uuid4().hex[:6]}"
+    beat = live.start_heartbeat(host, "loading", interval=60)
+    try:
+        started = live.worker_heartbeats()[0].started
+        time.sleep(0.05)
+        live.set_worker_state(host, "idle")
+        live.set_worker_state(host, "busy", task_id=uuid4())
+        assert live.worker_heartbeats()[0].started == started
+    finally:
+        beat.stop(timeout=1)
+    # Swarm runs the replacement under the same name, before the old heartbeat has expired.
+    beat = live.start_heartbeat(host, "loading", interval=60)
+    try:
+        (hb,) = live.worker_heartbeats()
+        assert hb.started > started
+    finally:
+        beat.stop(timeout=1)
+
+
 def test_host_without_worker_suffix_runs_on_machine_name(redis_live, monkeypatch):
     monkeypatch.setenv("MACHINE_NAME", "laptop")
     get_settings.cache_clear()
@@ -221,6 +244,64 @@ def test_alert_keeps_only_the_newest_twenty(redis_live):
     assert len(alerts) == get_settings().MAX_ALERTS == 20
     assert alerts[0].message == "alert 24"
     assert alerts[-1].message == "alert 5"
+
+
+@pytest.fixture
+def webhook(redis_live, monkeypatch):
+    """A local HTTP server as the alert webhook; yields the list of bodies it received."""
+    received = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            received.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setenv("ALERT_WEBHOOK_URL", f"http://127.0.0.1:{server.server_port}/hook")
+    get_settings.cache_clear()
+    yield received
+    server.shutdown()
+    get_settings.cache_clear()
+
+
+def test_alert_is_posted_to_the_webhook(webhook):
+    live.alert("queue full")
+    assert wait_until(lambda: webhook == [{"text": "queue full"}])
+    assert live.recent_alerts()[0].message == "queue full"
+
+
+def test_the_same_alert_reaches_the_webhook_once_in_thirty_minutes(webhook, redis_live):
+    live.alert("queue full")
+    live.alert("queue full")
+    live.alert("worker crash-loop")
+    assert wait_until(lambda: len(webhook) == 2)
+    time.sleep(0.5)
+    assert sorted(body["text"] for body in webhook) == ["queue full", "worker crash-loop"]
+    assert [a.message for a in live.recent_alerts()] == ["worker crash-loop", "queue full", "queue full"]
+    ttl = redis_live.ttl(live.alert_sent_key("queue full"))
+    assert get_settings().ALERT_REPEAT_AFTER_S - 5 < ttl <= get_settings().ALERT_REPEAT_AFTER_S == 30 * 60
+
+
+def test_an_unreachable_webhook_neither_blocks_nor_raises(redis_live, monkeypatch, caplog):
+    # A blackholed address: connecting would hang until the timeout.
+    monkeypatch.setenv("ALERT_WEBHOOK_URL", "http://10.255.255.1:9/hook")
+    monkeypatch.setenv("ALERT_WEBHOOK_TIMEOUT_S", "0.5")
+    get_settings.cache_clear()
+    started = time.monotonic()
+    live.alert("queue full")
+    assert time.monotonic() - started < 0.2
+    assert live.recent_alerts()[0].message == "queue full"
+    assert wait_until(lambda: "could not send the alert" in caplog.text)
+
+
+def test_no_webhook_sends_nothing(redis_live):
+    live.alert("queue full")
+    assert redis_live.exists(live.alert_sent_key("queue full")) == 0
 
 
 def test_redis_run_id_is_stable_while_redis_runs(redis_live):

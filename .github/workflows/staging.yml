@@ -1,0 +1,101 @@
+name: Staging
+
+# Every push to develop builds the images, deploys them to the staging swarm with the one-machine override,
+# and runs scripts/smoke.py there. A failed smoke test puts back what ran before and fails the run. Nothing
+# happens until the secrets STAGING_HOST ([user@]host of the staging manager) and STAGING_SSH_KEY exist;
+# STAGING_KNOWN_HOSTS (that machine's ssh-keyscan line) is optional but recommended. The repository variables
+# STAGING_DIR (the clone on that machine, default imagegen) and STAGING_URL (default https://localhost, as
+# seen from that machine) change the defaults.
+on:
+  push:
+    branches: [develop]
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  configured:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - id: check
+        env:
+          HOST: ${{ secrets.STAGING_HOST }}
+          KEY: ${{ secrets.STAGING_SSH_KEY }}
+        run: |
+          if [ -n "$HOST" ] && [ -n "$KEY" ]; then ready=true; else ready=false; fi
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+          echo "tag=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          [ "$ready" = true ] || echo "::notice::STAGING_HOST or STAGING_SSH_KEY is not set; nothing to deploy"
+
+  images:
+    name: image ${{ matrix.name }}
+    needs: configured
+    if: needs.configured.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - {name: api, dockerfile: infra/docker/api.Dockerfile}
+          # The one-machine override runs the fake worker, tagged <tag>-fake.
+          - {name: worker, dockerfile: infra/docker/worker.Dockerfile, target: fake, suffix: -fake}
+          - {name: controller, dockerfile: infra/docker/controller.Dockerfile}
+          - {name: nginx, dockerfile: infra/docker/nginx.Dockerfile}
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/imagegen-${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ steps.meta.outputs.image }}:${{ needs.configured.outputs.tag }}${{ matrix.suffix }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=staging-${{ matrix.name }}
+          cache-to: type=gha,scope=staging-${{ matrix.name }},mode=max
+
+  deploy:
+    needs: [configured, images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH key
+        env:
+          HOST: ${{ secrets.STAGING_HOST }}
+          KEY: ${{ secrets.STAGING_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.STAGING_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/staging
+          chmod 600 ~/.ssh/staging
+          if [ -n "$KNOWN_HOSTS" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::STAGING_KNOWN_HOSTS is not set; trusting whatever key the host shows"
+            ssh-keyscan -H "${HOST#*@}" > ~/.ssh/known_hosts
+          fi
+      - name: Deploy, smoke test, roll back on failure
+        env:
+          HOST: ${{ secrets.STAGING_HOST }}
+          DIR: ${{ vars.STAGING_DIR || 'imagegen' }}
+          URL: ${{ vars.STAGING_URL || 'https://localhost' }}
+          TAG: ${{ needs.configured.outputs.tag }}
+        run: |
+          scp -i ~/.ssh/staging scripts/swarm/staging-deploy.sh "$HOST:/tmp/imagegen-staging-deploy.sh"
+          ssh -i ~/.ssh/staging "$HOST" sh /tmp/imagegen-staging-deploy.sh "$DIR" "$GITHUB_SHA" "$TAG" "$URL"

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 from common import live, overview
 from common.config import get_settings
-from controller import autoscaler, status, sweeper
+from controller import alerts, autoscaler, status, sweeper
 from controller.scalers import Scaler
 
 log = logging.getLogger(__name__)
@@ -26,6 +26,11 @@ class ControllerState:
     last_cleanup: float = 0.0
     redis_changed_at: float = 0.0  # when the sweeper last saw a new Redis run id
     force_stopped: set[str] = field(default_factory=set)  # tasks whose worker was already killed
+    alert_since: dict[str, float] = field(default_factory=dict)  # when each alert's condition began to hold
+    alerts_raised: set[str] = field(default_factory=set)  # alerts already sent for the current episode
+    workers_seen: dict[str, float] | None = None  # each worker's start time on the previous tick
+    worker_starts: dict[str, list[float]] = field(default_factory=dict)  # per machine, within the window
+    workers_launched: int = 0  # started by the autoscaler and not yet seen, so not counted as restarts
 
 
 def tick(now: float, state: ControllerState) -> None:
@@ -35,6 +40,7 @@ def tick(now: float, state: ControllerState) -> None:
         ("heartbeat", lambda: live.write_machine_heartbeat(machine, overview.INFRA)),
         ("sweep", lambda: sweeper.sweep(now, state)),
         ("autoscale", lambda: autoscaler.autoscale_tick(now, state)),
+        ("alerts", lambda: alerts.check(now, state)),
         ("status", status.publish_status),
     )
     for name, part in parts:

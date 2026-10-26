@@ -5,6 +5,33 @@ and deliberately slowly. Speed isn't the goal. A generation takes minutes, so th
 test queueing, live progress, safe cancellation, load balancing across several machines, and horizontal
 autoscaling of workers with a limit.
 
+## How it works
+
+```
+browser ──https/wss──> Nginx (machine A) ──least_conn──> API servers (one per app machine, FastAPI)
+                                                              │ submit: row in Postgres, job on the Celery queue
+                                                              ▼
+       Postgres (tasks, users)   Redis (queue, progress, cancel flags, heartbeats, pub/sub)   MinIO (images)
+                                                              ▲
+                                  workers (Celery, one job each, CPU only, on the app machines)
+                                  controller (machine A): live status, sweeper, autoscaler, alerts
+```
+
+- **Submitting** answers at once with the task id, its place in the queue and when it should be ready. The
+  browser follows the job over a WebSocket; each API process holds one Redis subscription and forwards
+  progress, status and admin messages to its sockets.
+- **Workers** run Stable Diffusion 1.5 one step at a time, publish the progress after each step and check for a
+  cancel. Every status change is a single guarded `UPDATE`, so a cancelled task can never end up done and a
+  task is claimed by exactly one worker.
+- **The controller** (one instance) publishes the "N generating, M waiting" line and every queued user's
+  position and ready time every 5 s, fails tasks whose worker died, re-sends queued jobs after a Redis restart,
+  trims history, scales the Swarm worker service between `MIN_WORKERS` and `MAX_WORKERS`, and raises alerts.
+- **Limits:** five fixed sizes (256–768 px), a fixed number of steps, a prompt length cap, one active task per
+  user, a global queue cap (`503` with `Retry-After`), 50 tasks of history per user, and time limits derived
+  from the measured 768 px runtime. All of them are in `common/config.py`.
+- **Admin page** (`/admin`): machines, workers, every user's tasks with a cancel button, the autoscaler and its
+  alerts, all from heartbeats and the database.
+
 ## Quick start
 
 Requires Python 3.12, Docker with Compose v2, and `make`.
@@ -43,6 +70,10 @@ Where Playwright's own Chromium can't run, point `CHROMIUM_PATH` at an installed
 The tests that need a real cluster run by hand: `tests/load/locustfile.py` (shown against actual waiting
 times), `scripts/chaos.sh` (killing a worker, an API server and the controller) and `scripts/autoscale_check.sh`
 (a burst up to `MAX_WORKERS` and back). The top of each file says how to run it.
+
+CI (`.github/workflows/ci.yml`) runs lint, gitleaks, unit, API and frontend checks on every push, and adds the
+integration, load-balancer and end-to-end suites and a Trivy scan of the four images on pull requests into
+`develop` and on pushes to `develop` and `main`.
 
 ## Frontend
 
@@ -112,13 +143,46 @@ It prints `MEASURED_MAX_RUNTIME_S` and `CALIBRATED_SECONDS_PER_COST_UNIT` for `c
 `stop_grace_period` and memory reservation for `infra/stack.yml`, and how many workers fit on the machine
 (their sum is `MAX_WORKERS`). Keep the slowest machine's times.
 
+## Operations
+
+- **Staging:** every push to `develop` builds the images, deploys them to a one-machine staging swarm, and runs
+  `scripts/smoke.py` (health, sign-up, one 256 px job to done, its image). A failed smoke test redeploys the
+  previous build and fails the run. It needs the secrets `STAGING_HOST`, `STAGING_SSH_KEY` and
+  `STAGING_KNOWN_HOSTS`; without them it does nothing.
+- **Backups:** the stack's `backup` service runs `pg_dump` every night and keeps a week of dumps;
+  `scripts/restore_check.sh` (run weekly on machine A) restores the newest one into a throwaway database and
+  checks it.
+- **Alerts:** with `ALERT_WEBHOOK_URL` set (Slack-compatible), the controller posts a worker that could not
+  start, the autoscaler pinned at `MAX_WORKERS` for 15 minutes, a full queue for 10 minutes, and a worker
+  starting more than 3 times in 10 minutes on one machine. The same message goes out at most every 30 minutes.
+- **Dependencies:** Dependabot opens weekly update pull requests into `develop` for pip, npm, the Docker base
+  images and GitHub Actions.
+
+## Releasing
+
+Releases follow the branches: features merge into `develop`; a `release/X.Y.Z` branch is cut from `develop`,
+tested (the full suite, plus calibration, `scripts/chaos.sh` and `scripts/autoscale_check.sh` on the cluster),
+merged into `main` with `--no-ff` and tagged, then merged back into `develop`.
+
+```bash
+git checkout -b release/1.1.0 develop
+git checkout main && git merge --no-ff release/1.1.0 && git tag -a v1.1.0 -m "imagegen 1.1.0"
+git push origin main v1.1.0
+git checkout develop && git merge --no-ff release/1.1.0 && git push origin develop && git branch -d release/1.1.0
+```
+
+The tag runs `.github/workflows/release.yml`: it builds the `api`, `worker` (real model), `controller` and
+`nginx` images, pushes them to `ghcr.io/<owner>/imagegen-<name>:1.1.0`, and publishes a GitHub Release with
+the changes since the previous tag, grouped by git-cliff (`cliff.toml`) into features, fixes, tests and docs.
+Deploy it with `scripts/swarm/deploy.sh 1.1.0` and `REGISTRY=ghcr.io/<owner>` in `infra/.env.prod`.
+
 ## Repository settings
 
 Set these by hand on GitHub (Settings → Branches / General):
 
 - Protect `main` and `develop`: no direct pushes, changes only through pull requests.
 - Require the CI status checks `lint`, `unit`, `api` and `frontend` to pass before merging into `develop` and
-  `main`, and also `integration`, `lb` and `e2e`, which run on pull requests into `develop` and on pushes to
-  `develop` and `main`.
-- Require at least one approving review.
+  `main`, and also `integration`, `lb`, `e2e` and `trivy`, which run on pull requests into `develop` and on
+  pushes to `develop` and `main`.
+- Require at least one approving review; `.github/CODEOWNERS` requests it from the owner of the area.
 - Optional: enable "Automatically delete head branches".

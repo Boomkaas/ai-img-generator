@@ -63,7 +63,7 @@ def test_a_slow_beat_never_lands_after_a_newer_state(monkeypatch, host):
     monkeypatch.setattr(live, "_machine_figures", lambda: FIGURES)
     monkeypatch.setattr(live, "_write_hash", write_hash)
     with live._workers_lock:
-        live._workers[host] = {"state": "busy", "task_id": "t", "since": 0.0, "ttl": 15}
+        live._workers[host] = {"state": "busy", "task_id": "t", "since": 0.0, "started": 0.0, "ttl": 15}
 
     beat = threading.Thread(target=live._write_worker_heartbeat, args=(host,))
     beat.start()
