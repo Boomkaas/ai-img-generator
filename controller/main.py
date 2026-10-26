@@ -28,7 +28,7 @@ class ControllerState:
     force_stopped: set[str] = field(default_factory=set)  # tasks whose worker was already killed
     alert_since: dict[str, float] = field(default_factory=dict)  # when each alert's condition began to hold
     alerts_raised: set[str] = field(default_factory=set)  # alerts already sent for the current episode
-    workers_seen: set[str] | None = None  # worker heartbeat names on the previous tick
+    workers_seen: dict[str, float] | None = None  # each worker's start time on the previous tick
     worker_starts: dict[str, list[float]] = field(default_factory=dict)  # per machine, within the window
     workers_launched: int = 0  # started by the autoscaler and not yet seen, so not counted as restarts
 

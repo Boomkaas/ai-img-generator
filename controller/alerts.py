@@ -20,6 +20,8 @@ WORKER_RESTARTS = "Workers on {machine} started {count} times in {minutes} minut
 
 def check(now: float, state: ControllerState) -> None:
     settings = get_settings()
+    # Redis first: a database outage stops only the queue check, not the crash-loop one.
+    _check_worker_starts(now, state)
     desired = live.autoscaler_state().get("desired") or 0
     if _held(now, state, "at_max", desired >= settings.MAX_WORKERS, settings.ALERT_AT_MAX_WORKERS_S):
         live.alert(
@@ -29,7 +31,6 @@ def check(now: float, state: ControllerState) -> None:
     if _held(now, state, "queue_full", queue_full, settings.ALERT_QUEUE_FULL_S):
         minutes = settings.ALERT_QUEUE_FULL_S // 60
         live.alert(QUEUE_FULL.format(limit=settings.MAX_QUEUED_TOTAL, minutes=minutes))
-    _check_worker_starts(now, state)
 
 
 def _held(now: float, state: ControllerState, name: str, holds: bool, after_s: float) -> bool:
@@ -46,18 +47,21 @@ def _held(now: float, state: ControllerState, name: str, holds: bool, after_s: f
 
 
 def _check_worker_starts(now: float, state: ControllerState) -> None:
-    """Counts heartbeat names that appear, per machine. A worker that Swarm restarts keeps its name, but its
-    heartbeat expires while it is down and comes back with it. Starts the autoscaler asked for don't count."""
+    """Counts worker starts per machine: a heartbeat name not seen before, or one whose start time changed.
+    Swarm restarts a worker under the same name, often before its old heartbeat has expired, so a new name
+    alone would miss most restarts. Starts the autoscaler asked for don't count."""
     settings = get_settings()
     window = settings.ALERT_WORKER_STARTS_WINDOW_S
-    machines = {hb.host: hb.machine for hb in live.worker_heartbeats()}
+    beats = live.worker_heartbeats()
     if state.workers_seen is not None:  # on the first tick every worker would look new
-        for host in sorted(machines.keys() - state.workers_seen):
+        for hb in sorted(beats, key=lambda hb: hb.host):
+            if state.workers_seen.get(hb.host) == hb.started:
+                continue
             if state.workers_launched > 0:
                 state.workers_launched -= 1
             else:
-                state.worker_starts.setdefault(machines[host], []).append(now)
-    state.workers_seen = set(machines)
+                state.worker_starts.setdefault(hb.machine, []).append(now)
+    state.workers_seen = {hb.host: hb.started for hb in beats}
 
     for machine in list(state.worker_starts):
         starts = [t for t in state.worker_starts[machine] if now - t < window]

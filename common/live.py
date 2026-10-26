@@ -181,6 +181,7 @@ class WorkerHeartbeat:
     state: WorkerState
     task_id: str | None
     since: float  # epoch seconds of the last state change
+    started: float  # epoch seconds the worker process started; a restart under the same name changes it
     machine: str
     machine_cpu: float
     machine_ram: float
@@ -242,6 +243,7 @@ def _write_worker_heartbeat(host: str) -> None:
                 "state": current["state"],
                 "task_id": current["task_id"],
                 "since": current["since"],
+                "started": current["started"],
                 "machine": machine_of(host),
                 **_machine_figures(),
                 "rss_mb": psutil.Process().memory_info().rss // 2**20,
@@ -275,11 +277,13 @@ def start_heartbeat(
 ) -> Heartbeat:
     """Write the worker's heartbeat now and then every `interval` seconds from a daemon thread."""
     settings = get_settings()
+    now = time.time()
     with _workers_lock:
         _workers[host] = {
             "state": state,
             "task_id": "",
-            "since": time.time(),
+            "since": now,
+            "started": now,
             "ttl": ttl or settings.HEARTBEAT_TTL_S,
         }
     _write_worker_heartbeat(host)
@@ -291,10 +295,17 @@ def start_heartbeat(
 def set_worker_state(host: str, state: WorkerState, task_id=None) -> None:
     """Change the worker's state and write the heartbeat at once instead of within `interval`."""
     task_id = str(task_id) if task_id else ""
+    now = time.time()
     with _workers_lock:
         current = _workers.setdefault(
             host,
-            {"state": state, "task_id": task_id, "since": time.time(), "ttl": get_settings().HEARTBEAT_TTL_S},
+            {
+                "state": state,
+                "task_id": task_id,
+                "since": now,
+                "started": now,
+                "ttl": get_settings().HEARTBEAT_TTL_S,
+            },
         )
         if (current["state"], current["task_id"]) != (state, task_id):
             current.update(state=state, task_id=task_id, since=time.time())
@@ -317,6 +328,8 @@ def worker_heartbeats() -> list[WorkerHeartbeat]:
             state=data["state"],
             task_id=data["task_id"] or None,
             since=float(data["since"]),
+            # A worker of an older image writes no start time; its first state change stands in for it.
+            started=float(data.get("started") or data["since"]),
             machine=data["machine"],
             machine_cpu=float(data["machine_cpu"]),
             machine_ram=float(data["machine_ram"]),

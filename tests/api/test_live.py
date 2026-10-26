@@ -177,6 +177,26 @@ def test_since_only_moves_when_the_state_changes(redis_live):
     assert live.worker_heartbeats()[0].since > first
 
 
+def test_started_stays_through_state_changes_and_moves_on_a_restart(redis_live):
+    host = f"nodeB-worker-{uuid4().hex[:6]}"
+    beat = live.start_heartbeat(host, "loading", interval=60)
+    try:
+        started = live.worker_heartbeats()[0].started
+        time.sleep(0.05)
+        live.set_worker_state(host, "idle")
+        live.set_worker_state(host, "busy", task_id=uuid4())
+        assert live.worker_heartbeats()[0].started == started
+    finally:
+        beat.stop(timeout=1)
+    # Swarm runs the replacement under the same name, before the old heartbeat has expired.
+    beat = live.start_heartbeat(host, "loading", interval=60)
+    try:
+        (hb,) = live.worker_heartbeats()
+        assert hb.started > started
+    finally:
+        beat.stop(timeout=1)
+
+
 def test_host_without_worker_suffix_runs_on_machine_name(redis_live, monkeypatch):
     monkeypatch.setenv("MACHINE_NAME", "laptop")
     get_settings.cache_clear()

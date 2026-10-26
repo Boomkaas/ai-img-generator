@@ -17,14 +17,17 @@ MAX_QUEUED_TOTAL = 30
 class FakeLive:
     def __init__(self):
         self.desired = 1
-        self.workers = {}  # host -> machine
+        self.workers = {}  # host -> (machine, process start time)
         self.alerts = []
 
     def autoscaler_state(self):
         return {"desired": self.desired}
 
     def worker_heartbeats(self):
-        return [SimpleNamespace(host=host, machine=machine) for host, machine in self.workers.items()]
+        return [
+            SimpleNamespace(host=host, machine=machine, started=started)
+            for host, (machine, started) in self.workers.items()
+        ]
 
     def alert(self, message):
         self.alerts.append(message)
@@ -119,11 +122,9 @@ def test_a_queue_below_the_cap_never_alerts(fake):
 
 
 def restart(fake, now, host="nodeB-worker-1", machine="nodeB"):
-    """The worker's heartbeat expires while it is down, then comes back under the same name."""
-    fake.live.workers.pop(host, None)
+    """Swarm starts the worker again under the same name, before its old heartbeat has expired."""
+    fake.live.workers[host] = (machine, now)
     fake.check(now)
-    fake.live.workers[host] = machine
-    fake.check(now + 30)
 
 
 def restarts_message(count, machine="nodeB"):
@@ -131,7 +132,7 @@ def restarts_message(count, machine="nodeB"):
 
 
 def test_four_restarts_in_ten_minutes_alert(fake):
-    fake.live.workers = {"nodeB-worker-1": "nodeB"}
+    fake.live.workers = {"nodeB-worker-1": ("nodeB", NOW - 3600)}
     fake.check(NOW)
     for i in range(3):
         restart(fake, NOW + 60 + i * 120)
@@ -143,7 +144,7 @@ def test_four_restarts_in_ten_minutes_alert(fake):
 
 
 def test_restarts_spread_over_more_than_ten_minutes_do_not_alert(fake):
-    fake.live.workers = {"nodeB-worker-1": "nodeB"}
+    fake.live.workers = {"nodeB-worker-1": ("nodeB", NOW - 3600)}
     fake.check(NOW)
     for i in range(6):
         restart(fake, NOW + 60 + i * 210)
@@ -151,7 +152,7 @@ def test_restarts_spread_over_more_than_ten_minutes_do_not_alert(fake):
 
 
 def test_restarts_are_counted_per_machine(fake):
-    fake.live.workers = {"nodeB-worker-1": "nodeB", "nodeC-worker-2": "nodeC"}
+    fake.live.workers = {"nodeB-worker-1": ("nodeB", NOW - 3600), "nodeC-worker-2": ("nodeC", NOW - 3600)}
     fake.check(NOW)
     for i in range(2):
         restart(fake, NOW + 60 + i * 120, "nodeB-worker-1", "nodeB")
@@ -159,8 +160,20 @@ def test_restarts_are_counted_per_machine(fake):
     assert fake.live.alerts == []
 
 
+def test_a_worker_whose_heartbeat_expired_before_it_came_back_counts_once_per_start(fake):
+    fake.live.workers = {"nodeB-worker-1": ("nodeB", NOW - 3600)}
+    fake.check(NOW)
+    for i in range(4):
+        del fake.live.workers["nodeB-worker-1"]
+        fake.check(NOW + 60 + i * 120)
+        fake.live.workers["nodeB-worker-1"] = ("nodeB", NOW + 90 + i * 120)
+        fake.check(NOW + 90 + i * 120)
+        fake.check(NOW + 95 + i * 120)
+    assert fake.live.alerts == [restarts_message(4)]
+
+
 def test_workers_already_running_when_the_controller_starts_are_not_restarts(fake):
-    fake.live.workers = {f"nodeB-worker-{i}": "nodeB" for i in range(1, 6)}
+    fake.live.workers = {f"nodeB-worker-{i}": ("nodeB", NOW - 3600) for i in range(1, 6)}
     fake.check(NOW)
     fake.check(NOW + 5)
     assert fake.live.alerts == []
@@ -179,13 +192,13 @@ class FakeScaler:
 
 
 def test_workers_the_autoscaler_launched_are_not_restarts(fake):
-    fake.live.workers = {"nodeB-worker-1": "nodeB"}
+    fake.live.workers = {"nodeB-worker-1": ("nodeB", NOW - 3600)}
     fake.check(NOW)
     fake.state.scaler = FakeScaler(1)
     for n in range(2, 6):
         autoscaler._change(NOW, fake.state, n - 1, n, n - 1, "Added a worker")
     for n in range(2, 6):
-        fake.live.workers[f"nodeB-worker-{n}"] = "nodeB"
+        fake.live.workers[f"nodeB-worker-{n}"] = ("nodeB", NOW + n * 60)
         fake.check(NOW + n * 60)
     assert fake.live.alerts == []
     assert fake.state.workers_launched == 0
@@ -197,3 +210,17 @@ def test_a_scale_down_forgets_launches_that_never_came_up(fake):
     assert fake.state.workers_launched == 1
     autoscaler._change(NOW, fake.state, 2, 1, 1, "Gave up on a worker that could not start")
     assert fake.state.workers_launched == 0
+
+
+def test_a_database_outage_does_not_stop_the_crash_loop_check(fake):
+    def down(status):
+        raise OSError("database unreachable")
+
+    fake.db.count_tasks = down
+    fake.live.workers = {"nodeB-worker-1": ("nodeB", NOW - 3600)}
+    with pytest.raises(OSError):
+        fake.check(NOW)
+    for i in range(4):
+        with pytest.raises(OSError):
+            restart(fake, NOW + 60 + i * 60)
+    assert fake.live.alerts == [restarts_message(4)]
