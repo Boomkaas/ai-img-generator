@@ -1,0 +1,190 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  # New vulnerabilities turn up in images that haven't changed; the weekly run scans them again.
+  schedule:
+    - cron: "0 6 * * 1"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  PIPELINE: fake
+  TRIVY_VERSION: "0.75.0"
+
+# Each Python job installs with `make install` and runs the matching `make` target, so CI and local runs stay
+# identical.
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks scans the full history
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install
+        run: make install
+      - name: Ruff check and format check
+        run: make lint
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install
+        run: make install
+      - name: Unit tests
+        run: make test-unit
+
+  api:
+    # testcontainers starts Postgres, Redis and MinIO on the runner's Docker.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install
+        run: make install
+      - name: API tests
+        run: make test-api
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: ESLint and Prettier
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests
+        run: npm test
+      - name: Build
+        run: npx vite build
+
+  # The whole system in Docker Compose (infra/compose.test.yml) with the fake worker. These take minutes, so
+  # they run where a change is about to be integrated: PRs into develop, and develop and main themselves.
+  stack:
+    name: ${{ matrix.suite }}
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'develop')
+      || (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [integration, lb, e2e]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install
+        run: make install
+      - uses: docker/setup-buildx-action@v3
+      # The layers, the frontend's npm ci among them, come from the GitHub Actions cache.
+      - name: Build the test stack's images
+        uses: docker/bake-action@v6
+        with:
+          source: .
+          files: infra/compose.test.yml
+          load: true
+          # Bake reads the compose file's "context: .." from the working directory, not from infra/.
+          set: |
+            *.context=.
+            *.cache-from=type=gha,scope=test-stack
+            *.cache-to=type=gha,scope=test-stack,mode=max
+      - name: Playwright version
+        if: matrix.suite == 'e2e'
+        id: playwright
+        run: echo "version=$(.venv/bin/python -c 'import playwright._repo_version as v; print(v.version)')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        if: matrix.suite == 'e2e'
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ steps.playwright.outputs.version }}
+      - name: Chromium
+        if: matrix.suite == 'e2e'
+        run: .venv/bin/playwright install --with-deps --only-shell chromium
+      - name: Tests
+        run: make test-${{ matrix.suite }} NO_BUILD=1
+      # The compose logs, and for e2e the Playwright trace of each failed test.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ${{ matrix.suite }}-results
+          path: test-results/
+          if-no-files-found: ignore
+
+  # The four images, as the test stack builds them, scanned for critical vulnerabilities that have a fix. The
+  # worker is its fake target: the real one adds torch and several GB of weights on top of the same base.
+  # Findings without a fixed version are left out, since no change here could make them go away.
+  trivy:
+    if: >-
+      github.event_name == 'schedule'
+      || (github.event_name == 'pull_request' && github.base_ref == 'develop')
+      || (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the images
+        uses: docker/bake-action@v6
+        with:
+          source: .
+          files: infra/compose.test.yml
+          load: true
+          set: |
+            *.context=.
+            *.cache-from=type=gha,scope=test-stack
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: trivy-db-
+      - name: Scan
+        run: |
+          # As the runner's user, so the cache stays readable for actions/cache.
+          mkdir -p "$HOME/.cache/trivy"
+          failed=""
+          for image in api worker controller nginx; do
+            echo "::group::imagegen-test-$image"
+            docker run --rm --user "$(id -u):$(stat -c %g /var/run/docker.sock)" \
+              -v /var/run/docker.sock:/var/run/docker.sock -v "$HOME/.cache/trivy:/cache" \
+              "aquasec/trivy:$TRIVY_VERSION" --cache-dir /cache image --scanners vuln --severity CRITICAL \
+              --ignore-unfixed --exit-code 1 --skip-version-check "imagegen-test-$image:latest" \
+              || failed="$failed $image"
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::critical vulnerabilities with a fix in:$failed"
+            exit 1
+          fi

@@ -1,0 +1,77 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "imagegen"
+version = "1.0.0"
+description = "Text-to-image generation service on CPU, slow on purpose, to demonstrate queueing and autoscaling"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pydantic>=2",
+    "pydantic-settings",
+    "sqlalchemy>=2",
+    "psycopg[binary]>=3",
+    "alembic",
+    "redis>=5",
+    "boto3",
+    "celery[redis]>=5.4",
+    "psutil",
+]
+
+[project.optional-dependencies]
+api = [
+    "fastapi",
+    "uvicorn[standard]",
+    "argon2-cffi",
+    "pyjwt",
+]
+# torch and diffusers are installed by the worker image from the PyTorch CPU index.
+worker = [
+    "pillow",
+]
+controller = [
+    "docker",
+]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+    "testcontainers[postgres,redis,minio]",
+    "ruff",
+    "pyyaml",
+    "freezegun",
+    "playwright",
+    "locust",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["api", "worker", "controller", "common"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+# Python sources only: leave the code blocks in Markdown files alone.
+include = ["*.py", "*.pyi"]
+extend-exclude = ["frontend"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["api", "worker", "controller", "common"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "--strict-markers"
+markers = [
+    "unit: needs nothing external",
+    "api: needs Postgres, Redis and MinIO started by testcontainers",
+    "integration: needs the compose test stack",
+    "lb: needs the compose test stack with Nginx",
+    "e2e: needs the compose test stack and a browser",
+]

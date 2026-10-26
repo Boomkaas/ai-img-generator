@@ -1,0 +1,13 @@
+# Who is asked to review a pull request, by the area it touches. The last matching line wins.
+*                   @Boomkaas
+
+/api/               @Boomkaas
+/worker/            @Boomkaas
+/controller/        @Boomkaas
+/common/            @Boomkaas
+/migrations/        @Boomkaas
+/frontend/          @Boomkaas
+/infra/             @Boomkaas
+/scripts/           @Boomkaas
+/tests/             @Boomkaas
+/.github/           @Boomkaas
