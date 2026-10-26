@@ -137,7 +137,7 @@ jobs:
       - name: Tests
         run: make test-${{ matrix.suite }} NO_BUILD=1
       # The compose logs, and for e2e the Playwright trace of each failed test.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: ${{ matrix.suite }}-results
