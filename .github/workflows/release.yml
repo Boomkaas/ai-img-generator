@@ -95,7 +95,7 @@ jobs:
           OUTPUT: RELEASE_NOTES.md
       - name: Show the notes
         run: cat RELEASE_NOTES.md
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         if: env.PUBLISH == 'true'
         with:
           body_path: RELEASE_NOTES.md
