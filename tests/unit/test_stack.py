@@ -17,8 +17,6 @@ def secret_refs(service: str) -> list[dict]:
 
 @pytest.mark.parametrize("service", sorted(STACK["services"]))
 def test_no_secret_is_mounted_twice_in_one_service(service):
-    # Swarm keeps only one mount per source and drops the rest without a word, so the setting behind the
-    # dropped one would fall back to its localhost default.
     sources = [ref["source"] for ref in secret_refs(service)]
     assert len(sources) == len(set(sources))
 
@@ -36,7 +34,6 @@ def test_every_secret_a_service_uses_is_declared():
 
 def test_backups_run_next_to_postgres_and_keep_a_week():
     backup = STACK["services"]["backup"]
-    # pg_dump refuses a server newer than itself, so the backup uses the database's own image.
     assert backup["image"] == STACK["services"]["postgres"]["image"]
     assert backup["deploy"]["placement"] == STACK["services"]["postgres"]["deploy"]["placement"]
     assert backup["environment"]["BACKUP_KEEP"] == "7"

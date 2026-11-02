@@ -20,7 +20,6 @@ WORKER_RESTARTS = "Workers on {machine} started {count} times in {minutes} minut
 
 def check(now: float, state: ControllerState) -> None:
     settings = get_settings()
-    # Redis first: a database outage stops only the queue check, not the crash-loop one.
     _check_worker_starts(now, state)
     desired = live.autoscaler_state().get("desired") or 0
     if _held(now, state, "at_max", desired >= settings.MAX_WORKERS, settings.ALERT_AT_MAX_WORKERS_S):
@@ -53,7 +52,7 @@ def _check_worker_starts(now: float, state: ControllerState) -> None:
     settings = get_settings()
     window = settings.ALERT_WORKER_STARTS_WINDOW_S
     beats = live.worker_heartbeats()
-    if state.workers_seen is not None:  # on the first tick every worker would look new
+    if state.workers_seen is not None:
         for hb in sorted(beats, key=lambda hb: hb.host):
             if state.workers_seen.get(hb.host) == hb.started:
                 continue

@@ -18,8 +18,6 @@ GENERATE_TASK = "worker.tasks.generate_image"
 def app() -> Celery:
     settings = get_settings()
     celery = Celery("imagegen", broker=settings.BROKER_URL)
-    # kombu's Redis transport has no socket timeouts by default, so a broker host that stops answering
-    # would hold a submit or cancel request for the OS TCP timeout on every retry.
     celery.conf.update(
         broker_transport_options={
             "socket_connect_timeout": settings.REDIS_CONNECT_TIMEOUT_S,
@@ -38,7 +36,6 @@ def reset_app() -> None:
 
 
 def send_generate(task) -> None:
-    # Celery's task id is the database id, so revoke() and the worker's claim refer to the same task.
     app().send_task(
         GENERATE_TASK,
         args=[str(task.id), str(task.user_id), task.prompt, task.size],

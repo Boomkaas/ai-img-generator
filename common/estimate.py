@@ -15,7 +15,7 @@ from datetime import datetime
 from common import db, live
 from common.config import get_settings
 
-BASE_SIZE = 512  # one cost unit: a default 512 px job
+BASE_SIZE = 512
 
 
 def cost(size: int) -> float:
@@ -75,7 +75,6 @@ def ready_in_seconds(task, spu: float | None = None) -> float:
     """Seconds until the task's image should be ready; 0 once it has finished."""
     spu = seconds_per_cost_unit() if spu is None else spu
     if task.status == db.QUEUED:
-        # Ahead of it in the same (created_at, id) order as db.queue_position, so equal times can't disagree.
         place = (task.created_at, task.id)
         ahead = [t for t in db.queued_tasks() if (t.created_at, t.id) < place]
         return _wait_behind(ahead, spu) + cost(task.size) * spu
@@ -86,7 +85,7 @@ def ready_in_seconds(task, spu: float | None = None) -> float:
 
 @dataclass(frozen=True)
 class Forecast:
-    ready_in_s: dict[uuid.UUID, float]  # per active task
+    ready_in_s: dict[uuid.UUID, float]
     new_image_ready_in_s: float
 
 

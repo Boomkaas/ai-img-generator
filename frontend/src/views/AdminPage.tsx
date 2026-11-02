@@ -28,13 +28,10 @@ export function AdminPage() {
     let received = 0;
     let pausedTimer: ReturnType<typeof setTimeout> | undefined;
 
-    // A failed fetch is left to the socket, and the paused line shows if that stays quiet too. A 403 means
-    // the user was demoted since signing in; the server then also stops sending the overview.
     const fetchOverview = () => {
       const before = received;
       getAdminOverview().then(
         (fetched) => {
-          // An overview from the socket is newer than one fetched before it arrived.
           if (!stopped && received === before) setOverview(fetched);
         },
         (error) => {
@@ -165,7 +162,6 @@ function TaskRow({ task }: { task: TaskItem }) {
   const noButton = useRef<HTMLButtonElement>(null);
   const backFromAsking = useRef(false);
 
-  // The button that was clicked disappears, so focus moves to the one that replaces it.
   useEffect(() => {
     if (step === "asking") noButton.current?.focus();
     if (step === "idle" && backFromAsking.current) {

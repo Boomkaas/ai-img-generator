@@ -4,10 +4,6 @@ import type { ServerMessage } from "./types";
 
 const UNAUTHORISED = 4401;
 
-/**
- * Keep a socket to /ws open, reconnecting with backoff, until the returned function is called. Messages
- * sent while it was down are lost, but the server starts every connection with a fresh snapshot.
- */
 export function openSocket(onMessage: (message: ServerMessage) => void): () => void {
   const url = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`;
   let socket: WebSocket | null = null;
@@ -29,7 +25,6 @@ export function openSocket(onMessage: (message: ServerMessage) => void): () => v
     attempt += 1;
   }
 
-  // A socket whose peer vanished can stay "open" for minutes; silence is the only reliable sign.
   function expectPing(ws: WebSocket) {
     clearTimeout(deadTimer);
     deadTimer = setTimeout(() => {
@@ -61,7 +56,6 @@ export function openSocket(onMessage: (message: ServerMessage) => void): () => v
         reconnectLater();
         return;
       }
-      // Only a refused refresh ends the session; an unreachable server is retried like any other drop.
       refreshSession().then(
         (ok) => {
           if (stopped) return;

@@ -1,8 +1,4 @@
 #!/bin/sh
-# Run on every app machine before the demo. The worker image holds the model weights (several GB); without
-# it in advance, the first worker the autoscaler starts here spends minutes downloading instead of loading.
-#
-#   REGISTRY=registry.example.org scripts/swarm/prepull.sh <tag>
 set -eu
 
 if [ $# -ne 1 ]; then

@@ -1,4 +1,3 @@
-# API server; also runs the migrations (the stack's migrate service) and the admin scripts.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -22,7 +21,6 @@ COPY scripts/ scripts/
 
 USER app
 EXPOSE 8000
-# Any answer counts, a 503 too: that only means Postgres or Redis is down, which a restart wouldn't fix.
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 \
     CMD ["python", "-c", "import http.client as h; c = h.HTTPConnection('127.0.0.1', 8000, timeout=4); c.request('GET', '/api/health'); c.getresponse()"]
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", \

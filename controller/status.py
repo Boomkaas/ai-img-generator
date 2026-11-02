@@ -25,7 +25,6 @@ def publish_status() -> None:
 
     positions = {t.id: position for position, t in enumerate(queued, start=1)}
     for t in active:
-        # Progress and stage come from the worker; sending them here could move a bar backwards.
         update = TaskUpdate(id=t.id, status=t.status, ready_in_s=forecast.ready_in_s[t.id])
         if t.status == db.QUEUED:
             update.position = positions[t.id]

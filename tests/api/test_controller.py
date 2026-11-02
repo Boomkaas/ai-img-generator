@@ -16,7 +16,6 @@ PASSWORD = "correct horse battery"
 
 @pytest.fixture(autouse=True)
 def no_local_workers(monkeypatch):
-    # set_worker_state keeps each host's state in the module; start every test without any.
     monkeypatch.setattr(live, "_workers", {})
 
 
@@ -136,7 +135,6 @@ def test_overview_shows_busy_workers_progress_and_owner(redis_live):
         "nodeB-worker-1",
         36,
     )
-    # Before the autoscaler reports, its block falls back to the heartbeats.
     assert (overview.autoscaler.ready, overview.autoscaler.starting) == (1, 0)
 
 

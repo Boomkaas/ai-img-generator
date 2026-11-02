@@ -13,7 +13,6 @@ from botocore.exceptions import ClientError
 
 from common.config import get_settings
 
-# A HEAD response has no body, so a missing key and a missing bucket both arrive as a bare "404".
 _NOT_FOUND = ("404", "NotFound")
 
 
@@ -28,10 +27,9 @@ def _client():
         region_name=settings.S3_REGION,
         config=Config(
             signature_version="s3v4",
-            s3={"addressing_style": "path"},  # path-style for MinIO
+            s3={"addressing_style": "path"},
             connect_timeout=settings.S3_CONNECT_TIMEOUT_S,
             read_timeout=settings.S3_READ_TIMEOUT_S,
-            # total_max_attempts counts the first try; botocore's max_attempts would count only retries.
             retries={"total_max_attempts": settings.S3_MAX_ATTEMPTS, "mode": "standard"},
         ),
     )
@@ -58,7 +56,7 @@ def ensure_bucket() -> None:
             raise
         try:
             _client().create_bucket(Bucket=_bucket())
-        except ClientError as create_exc:  # another process created it first
+        except ClientError as create_exc:
             if _code(create_exc) != "BucketAlreadyOwnedByYou":
                 raise
 
@@ -114,7 +112,7 @@ def exists(key: str) -> bool:
     except ClientError as exc:
         if _code(exc) not in _NOT_FOUND:
             raise
-        _client().head_bucket(Bucket=_bucket())  # raises if it was the bucket that is missing
+        _client().head_bucket(Bucket=_bucket())
         return False
     return True
 

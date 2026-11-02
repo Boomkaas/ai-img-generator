@@ -1,7 +1,4 @@
 #!/bin/sh
-# Run on the manager: lets Swarm place API servers and workers on a machine.
-#
-#   scripts/swarm/label-app-node.sh <node>     (a hostname or ID from docker node ls)
 set -eu
 
 if [ $# -ne 1 ]; then

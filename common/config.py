@@ -19,111 +19,94 @@ SECRETS_DIR = "/run/secrets"
 
 
 class Settings(BaseSettings):
-    # Outside Swarm the directory doesn't exist, and pydantic-settings would warn about it on every load.
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",
         secrets_dir=SECRETS_DIR if os.path.isdir(SECRETS_DIR) else None,
     )
 
-    # --- Connections ---
     DATABASE_URL: str = "postgresql+psycopg://imagegen:imagegen@localhost:5432/imagegen"
     DB_POOL_SIZE: int = Field(5, ge=1)
-    DB_POOL_TIMEOUT_S: float = Field(5, gt=0)  # wait for a free pooled connection before failing
-    DB_CONNECT_TIMEOUT_S: int = Field(5, ge=2)  # libpq counts whole seconds and treats less than 2 as 2
+    DB_POOL_TIMEOUT_S: float = Field(5, gt=0)
+    DB_CONNECT_TIMEOUT_S: int = Field(5, ge=2)
     BROKER_URL: str = "redis://localhost:6379/0"
-    BROKER_PUBLISH_MAX_RETRIES: int = Field(1, ge=0)  # each try may wait REDIS_CONNECT_TIMEOUT_S
+    BROKER_PUBLISH_MAX_RETRIES: int = Field(1, ge=0)
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_CONNECT_TIMEOUT_S: float = Field(5, gt=0)
-    REDIS_SOCKET_TIMEOUT_S: float = Field(5, gt=0)  # sync client only: pub/sub connections sit idle
+    REDIS_SOCKET_TIMEOUT_S: float = Field(5, gt=0)
     S3_ENDPOINT: str = "http://localhost:9000"
     S3_ACCESS_KEY: str = "imagegen"
     S3_SECRET_KEY: str = "imagegen-dev-secret"
     S3_BUCKET: str = "imagegen"
-    S3_REGION: str = "us-east-1"  # MinIO ignores it, but request signing needs one
+    S3_REGION: str = "us-east-1"
     S3_STREAM_CHUNK_BYTES: int = Field(64 * 1024, ge=1)
     S3_CONNECT_TIMEOUT_S: float = Field(5, gt=0)
     S3_READ_TIMEOUT_S: float = Field(30, gt=0)
-    S3_MAX_ATTEMPTS: int = Field(3, ge=1)  # the first try included
+    S3_MAX_ATTEMPTS: int = Field(3, ge=1)
 
-    # --- Auth ---
-    JWT_SECRET: str = Field(min_length=32)  # HMAC key for HS256; at least 256 bits
+    JWT_SECRET: str = Field(min_length=32)
     COOKIE_SECURE: bool = True
     ALLOWED_ORIGINS: Annotated[tuple[str, ...], NoDecode] = ("https://localhost",)
     ACCESS_TOKEN_TTL_S: int = Field(15 * 60, gt=0)
     REFRESH_TOKEN_TTL_S: int = Field(7 * 24 * 3600, gt=0)
     MIN_PASSWORD_LEN: int = Field(8, ge=1)
-    MAX_EMAIL_LEN: int = Field(254, ge=3)  # the longest address SMTP allows
-    # Each argon2 hash takes 64 MiB, so this bounds an API process's hashing memory however many sign in.
+    MAX_EMAIL_LEN: int = Field(254, ge=3)
     MAX_CONCURRENT_PASSWORD_HASHES: int = Field(4, ge=1)
 
-    # --- API process ---
-    REQUEST_RATE_WINDOW_S: int = Field(60, gt=0)  # the rolling window behind requests_per_min
-    IMAGE_CACHE_MAX_AGE_S: int = Field(24 * 3600, ge=0)  # a finished image never changes
-    WS_PING_INTERVAL_S: float = Field(25, gt=0)  # well inside Nginx's one-hour read timeout on /ws
+    REQUEST_RATE_WINDOW_S: int = Field(60, gt=0)
+    IMAGE_CACHE_MAX_AGE_S: int = Field(24 * 3600, ge=0)
+    WS_PING_INTERVAL_S: float = Field(25, gt=0)
     WS_SEND_TIMEOUT_S: float = Field(5, gt=0)
-    WS_OUTBOX_SIZE: int = Field(100, ge=1)  # a socket this many messages behind is closed
-    WS_RESUBSCRIBE_BACKOFF_S: tuple[float, ...] = (1, 2, 5, 10)  # the last value repeats
+    WS_OUTBOX_SIZE: int = Field(100, ge=1)
+    WS_RESUBSCRIBE_BACKOFF_S: tuple[float, ...] = (1, 2, 5, 10)
     WS_MAX_SOCKETS_PER_USER: int = Field(10, ge=1)
-    # Sockets connecting within this many seconds of each other share one status, so a reconnect storm after
-    # an API restart doesn't run the wait estimate once per browser.
     SYSTEM_STATUS_CACHE_S: float = Field(1, ge=0)
-    ADMIN_RECHECK_INTERVAL_S: float = Field(5, gt=0)  # how soon a demoted admin stops getting the overview
+    ADMIN_RECHECK_INTERVAL_S: float = Field(5, gt=0)
 
-    # --- Worker ---
     MACHINE_NAME: str = Field(default_factory=socket.gethostname)
-    WORKER_NAME: str = Field(default_factory=socket.gethostname)  # "<machine>-worker-<slot>" under Swarm
+    WORKER_NAME: str = Field(default_factory=socket.gethostname)
     PIPELINE: Literal["real", "fake"] = "real"
     FAKE_STEP_SECONDS: float = Field(1.0, ge=0)
     MODEL_DIR: str = "/models/sd15"
     WORKER_THREADS: int = Field(2, ge=1)
     STEP_DELAY_SECONDS: float = Field(0, ge=0)
     NUM_STEPS: int = Field(25, ge=1)
-    # A job whose claim hits a database outage is retried after 1, 2, 4 ... s, capped at the backoff maximum;
-    # the defaults ride out about 11 min.
     WORKER_DB_MAX_RETRIES: int = Field(16, ge=0)
     WORKER_DB_RETRY_BACKOFF_MAX_S: int = Field(60, gt=0)
 
-    # --- Limits on one task and on the number of tasks ---
     ALLOWED_SIZES: tuple[int, ...] = (256, 384, 512, 640, 768)
     MAX_PROMPT_LEN: int = Field(500, ge=1)
     MAX_ACTIVE_TASKS_PER_USER: int = Field(1, ge=1)
     MAX_QUEUED_TOTAL: int = Field(30, ge=1)
     MAX_HISTORY_PER_USER: int = Field(50, ge=1)
     HISTORY_PAGE_SIZE: int = Field(20, ge=1)
-    HISTORY_PAGE_MAX: int = Field(50, ge=1)  # a larger requested limit is cut to this
+    HISTORY_PAGE_MAX: int = Field(50, ge=1)
 
-    # --- Timing and estimates ---
-    MEASURED_MAX_RUNTIME_S: int = Field(1080, gt=0)  # example; replaced after calibration
+    MEASURED_MAX_RUNTIME_S: int = Field(1080, gt=0)
     CALIBRATED_SECONDS_PER_COST_UNIT: float = Field(480, gt=0)
-    ESTIMATE_SAMPLE_SIZE: int = Field(50, ge=1)  # recent done tasks the median is taken over
-    ESTIMATE_MIN_SAMPLES: int = Field(5, ge=1)  # fewer than this: use the calibrated value
+    ESTIMATE_SAMPLE_SIZE: int = Field(50, ge=1)
+    ESTIMATE_MIN_SAMPLES: int = Field(5, ge=1)
 
-    # --- Calibration: how scripts/calibrate.py turns measurements into worker sizing ---
-    WORKER_MEMORY_MARGIN_GB: int = Field(1, ge=0)  # above the measured peak, for the memory reservation
-    APP_MACHINE_RESERVED_RAM_GB: int = Field(2, ge=0)  # kept for the OS and the API server
-    APP_MACHINE_RESERVED_CORES: int = Field(1, ge=0)  # kept free so pages and WebSockets stay responsive
+    WORKER_MEMORY_MARGIN_GB: int = Field(1, ge=0)
+    APP_MACHINE_RESERVED_RAM_GB: int = Field(2, ge=0)
+    APP_MACHINE_RESERVED_CORES: int = Field(1, ge=0)
 
-    # --- Heartbeats and admin panel ---
     HEARTBEAT_INTERVAL_S: float = Field(5, gt=0)
-    HEARTBEAT_TTL_S: int = Field(15, ge=1)  # a process that stops writing disappears after this
+    HEARTBEAT_TTL_S: int = Field(15, ge=1)
     MAX_ALERTS: int = Field(20, ge=1)
 
-    # --- Derived timeouts; None means "derive from MEASURED_MAX_RUNTIME_S" ---
     TASK_SOFT_TIME_LIMIT: int | None = None
     TASK_TIME_LIMIT: int | None = None
     BROKER_VISIBILITY_TIMEOUT: int | None = None
     WORKER_STOP_GRACE_S: int | None = None
     CANCEL_FLAG_TTL_S: int | None = None
-    WORKER_PROC_ALIVE_TIMEOUT: int = Field(180, gt=0)  # longer than loading the model
+    WORKER_PROC_ALIVE_TIMEOUT: int = Field(180, gt=0)
 
-    # --- Controller / sweeper ---
     CONTROLLER_TICK_S: float = Field(5, gt=0)
-    ORPHAN_AFTER_S: int = Field(60, gt=0)  # a running task no heartbeat lists for this long is failed
-    FORCE_STOP_AFTER_S: int = Field(60, gt=0)  # a cancelled task's worker still busy after this is killed
+    ORPHAN_AFTER_S: int = Field(60, gt=0)
+    FORCE_STOP_AFTER_S: int = Field(60, gt=0)
     HISTORY_CLEANUP_INTERVAL_S: int = Field(600, gt=0)
 
-    # --- Controller / autoscaler ---
     SCALER: Literal["none", "swarm"] = "none"
     WORKER_SERVICE: str = "imagegen_worker"
     MIN_WORKERS: int = Field(1, ge=0)
@@ -133,13 +116,12 @@ class Settings(BaseSettings):
     STARTUP_TIMEOUT_S: int = Field(600, gt=0)
     SCALE_DOWN_IDLE_S: int = Field(300, ge=0)
 
-    # --- Alerts ---
-    ALERT_WEBHOOK_URL: str = ""  # Slack-compatible: gets {"text": ...}; empty sends nothing
+    ALERT_WEBHOOK_URL: str = ""
     ALERT_WEBHOOK_TIMEOUT_S: float = Field(3, gt=0)
-    ALERT_REPEAT_AFTER_S: int = Field(30 * 60, ge=1)  # the same message is sent at most this often
+    ALERT_REPEAT_AFTER_S: int = Field(30 * 60, ge=1)
     ALERT_AT_MAX_WORKERS_S: int = Field(15 * 60, gt=0)
     ALERT_QUEUE_FULL_S: int = Field(10 * 60, gt=0)
-    ALERT_WORKER_STARTS: int = Field(3, ge=1)  # more starts than this on one machine within the window
+    ALERT_WORKER_STARTS: int = Field(3, ge=1)
     ALERT_WORKER_STARTS_WINDOW_S: int = Field(10 * 60, gt=0)
 
     @field_validator("ALLOWED_ORIGINS", mode="before")
@@ -162,7 +144,6 @@ class Settings(BaseSettings):
         if self.CANCEL_FLAG_TTL_S is None:
             self.CANCEL_FLAG_TTL_S = self.TASK_TIME_LIMIT
 
-        # Each pair must be strictly increasing.
         chain = [
             ("MEASURED_MAX_RUNTIME_S", "TASK_SOFT_TIME_LIMIT"),
             ("TASK_SOFT_TIME_LIMIT", "TASK_TIME_LIMIT"),

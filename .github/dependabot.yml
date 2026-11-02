@@ -1,8 +1,5 @@
-# Weekly update pull requests into develop, where CI tests them like any other change. Minor and patch
-# updates come grouped, one pull request per ecosystem; a major update gets its own.
 version: 2
 updates:
-  # pyproject.toml, and the exact versions the images install (infra/docker/constraints.txt).
   - package-ecosystem: pip
     directories: ["/", "/infra/docker"]
     schedule: {interval: weekly}
@@ -19,7 +16,6 @@ updates:
     groups:
       frontend: {update-types: [minor, patch]}
 
-  # The base images of infra/docker/*.Dockerfile.
   - package-ecosystem: docker
     directory: /infra/docker
     schedule: {interval: weekly}

@@ -33,9 +33,9 @@ def test_timeouts_follow_the_measured_runtime():
     r = recommend(measurement(), settings())
     t = r.timeouts
     assert (t.MEASURED_MAX_RUNTIME_S, t.CALIBRATED_SECONDS_PER_COST_UNIT) == (701, 301)
-    assert t.TASK_SOFT_TIME_LIMIT == 1051  # 701 * 1.5
+    assert t.TASK_SOFT_TIME_LIMIT == 1051
     assert t.WORKER_STOP_GRACE_S == t.TASK_SOFT_TIME_LIMIT + 60 + 120
-    assert r.stop_grace_period == "21m"  # 1231 s, rounded up to whole minutes
+    assert r.stop_grace_period == "21m"
 
 
 def test_derived_timeouts_set_in_the_environment_do_not_leak_in(monkeypatch):
@@ -54,9 +54,9 @@ def test_memory_reservation_is_peak_plus_margin_rounded_up():
 @pytest.mark.parametrize(
     ("ram_gb", "cores", "by_ram", "by_cpu", "workers"),
     [
-        (16, 8, 2, 3, 2),  # RAM decides
-        (64, 4, 8, 1, 1),  # CPU decides
-        (8, 2, 0, 0, 0),  # nothing fits
+        (16, 8, 2, 3, 2),
+        (64, 4, 8, 1, 1),
+        (8, 2, 0, 0, 0),
     ],
 )
 def test_workers_that_fit(ram_gb, cores, by_ram, by_cpu, workers):

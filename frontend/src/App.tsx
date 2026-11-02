@@ -30,11 +30,7 @@ export function App() {
 
   const signedIn = useCallback((user: User) => setSession({ state: "signedIn", user }), []);
   const signOut = useCallback(async () => {
-    try {
-      await logOut();
-    } catch {
-      // The cookies may outlive a failed logout, but this tab still forgets the user.
-    }
+    await logOut().catch(() => undefined);
     setSession({ state: "signedOut" });
   }, []);
 

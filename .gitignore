@@ -1,15 +1,12 @@
-# Environment
 .env
 .env.*
 !.env.example
 !.env.prod.example
 
-# Virtualenvs
 .venv/
 venv/
 env/
 
-# Python caches and build output
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -19,7 +16,6 @@ dist/
 .mypy_cache/
 .pytest_cache/
 
-# Test output
 .coverage
 .coverage.*
 htmlcov/
@@ -29,15 +25,12 @@ test-results/
 playwright-report/
 reports/
 
-# Frontend
 node_modules/
 frontend/dist/
 
-# Editors / OS
 .idea/
 .vscode/
 *.swp
 .DS_Store
 
-# Local model weights for PIPELINE=real
 models/

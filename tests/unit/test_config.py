@@ -43,7 +43,6 @@ def test_timeouts_are_in_order():
     assert s.MEASURED_MAX_RUNTIME_S < s.TASK_SOFT_TIME_LIMIT < s.TASK_TIME_LIMIT
     assert s.TASK_TIME_LIMIT < s.BROKER_VISIBILITY_TIMEOUT
     assert s.TASK_TIME_LIMIT < s.WORKER_STOP_GRACE_S
-    # Swarm kills a worker this long after SIGTERM; any shorter and scaling down could cut a job off.
     grace = yaml.safe_load(STACK_FILE.read_text())["services"]["worker"]["stop_grace_period"]
     assert parse_duration(grace) >= s.WORKER_STOP_GRACE_S
 
@@ -66,15 +65,14 @@ def test_derived_timeouts_follow_measured_runtime_from_env(monkeypatch):
 def test_one_derived_timeout_can_be_overridden_by_env(monkeypatch):
     monkeypatch.setenv("TASK_TIME_LIMIT", "1700")
     s = make()
-    assert s.TASK_SOFT_TIME_LIMIT == 1620  # still derived
+    assert s.TASK_SOFT_TIME_LIMIT == 1620
     assert s.TASK_TIME_LIMIT == 1700
-    assert s.BROKER_VISIBILITY_TIMEOUT == 3400  # derived from the override
+    assert s.BROKER_VISIBILITY_TIMEOUT == 3400
     assert s.WORKER_STOP_GRACE_S == 1820
     assert s.CANCEL_FLAG_TTL_S == 1700
 
 
 def test_short_test_timeouts_are_accepted(monkeypatch):
-    # The shape the integration tests use: everything shortened, order kept.
     short = {"MEASURED_MAX_RUNTIME_S": "2", "TASK_SOFT_TIME_LIMIT": "3", "TASK_TIME_LIMIT": "10"}
     for name, value in short.items():
         monkeypatch.setenv(name, value)

@@ -22,7 +22,7 @@ PROMPT = "a lighthouse on a cliff at dusk"
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 POLL_S = 2
 REQUEST_TIMEOUT_S = 30
-SIGN_UP_RETRY_S = 7  # Nginx allows one sign-up every six seconds from an address, after a burst
+SIGN_UP_RETRY_S = 7
 FINISHED = ("done", "failed", "cancelled")
 
 
@@ -34,7 +34,7 @@ class Client:
     def __init__(self, base_url: str, insecure: bool):
         self.base_url = base_url.rstrip("/")
         context = ssl.create_default_context()
-        if insecure:  # a lab deployment's certificate is often self-signed
+        if insecure:
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
         self.opener = urllib.request.build_opener(
@@ -60,7 +60,7 @@ class Client:
 
     def json(self, method: str, path: str, expect: int, body: dict | None = None, headers=None) -> dict:
         status, _, raw = self.request(method, path, body, headers)
-        if status == 401 and path != "/api/auth/refresh":  # the 15-minute access token ran out
+        if status == 401 and path != "/api/auth/refresh":
             self.json("POST", "/api/auth/refresh", 200, {})
             status, _, raw = self.request(method, path, body, headers)
         if status != expect:
@@ -116,7 +116,7 @@ def follow(client: Client, task_id: str, timeout_s: float) -> dict:
 def check_image(raw: bytes, content_type: str) -> None:
     if content_type != "image/png" or not raw.startswith(PNG_SIGNATURE):
         raise SmokeFailure(f"the image is not a PNG ({content_type}, {len(raw)} bytes)")
-    width, height = struct.unpack(">II", raw[16:24])  # IHDR, the first chunk
+    width, height = struct.unpack(">II", raw[16:24])
     if (width, height) != (SIZE, SIZE):
         raise SmokeFailure(f"the image is {width}x{height}, expected {SIZE}x{SIZE}")
 
@@ -160,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
         "--health-wait", type=float, default=180, help="seconds to wait for /api/health (default 180)"
     )
     args = parser.parse_args(argv)
-    sys.stdout.reconfigure(line_buffering=True)  # the steps stay in order with the error in a CI log
+    sys.stdout.reconfigure(line_buffering=True)
     try:
         run(args.base_url, args.insecure, args.timeout, args.health_wait)
     except SmokeFailure as exc:

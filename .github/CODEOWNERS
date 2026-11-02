@@ -1,4 +1,3 @@
-# Who is asked to review a pull request, by the area it touches. The last matching line wins.
 *                   @Boomkaas
 
 /api/               @Boomkaas

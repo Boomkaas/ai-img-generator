@@ -11,7 +11,6 @@ if config.config_file_name is not None:
 
 
 def database_url() -> str:
-    # Tests pass the URL explicitly; otherwise use DATABASE_URL from the settings.
     url = config.get_main_option("sqlalchemy.url")
     if not url:
         from common.config import get_settings

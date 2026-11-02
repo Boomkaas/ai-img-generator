@@ -39,7 +39,6 @@ class Connection:
         return True
 
     def stop(self) -> None:
-        # The backlog would never be sent anyway; dropping it makes room for the stop marker.
         while not self._outbox.empty():
             self._outbox.get_nowait()
         self._outbox.put_nowait(None)
@@ -153,7 +152,6 @@ class Hub:
                     await pubsub.subscribe(live.SYSTEM_CHANNEL, live.ADMIN_CHANNEL)
                     await pubsub.psubscribe(live.USER_CHANNEL_PATTERN)
                     failures = 0
-                    # Anything published while unsubscribed is lost: a task may have finished meanwhile.
                     await self._resend_snapshots()
                     async for message in pubsub.listen():
                         if message["type"] in ("message", "pmessage"):

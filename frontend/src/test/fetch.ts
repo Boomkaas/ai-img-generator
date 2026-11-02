@@ -6,7 +6,6 @@ type Handler = (init: RequestInit) => Response | Promise<Response>;
 export const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
-/** Stub fetch with handlers keyed by "METHOD path"; anything else answers 404. */
 export function stubFetch(routes: Record<string, Handler>) {
   const fetch = vi.fn(async (path: string, init: RequestInit = {}) => {
     const handler = routes[`${init.method ?? "GET"} ${path}`];

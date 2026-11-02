@@ -88,9 +88,6 @@ class Ping(BaseModel):
     type: Literal["ping"] = "ping"
 
 
-# --- Admin overview -----------------------------------------------------------------------------------------
-
-
 class ApiStats(BaseModel):
     sockets: int
     requests_per_min: int
@@ -101,7 +98,7 @@ class MachineItem(BaseModel):
     role: str
     cpu: float
     ram: float
-    api: ApiStats | None = None  # only on machines that run an API server
+    api: ApiStats | None = None
 
 
 class WorkerItem(BaseModel):

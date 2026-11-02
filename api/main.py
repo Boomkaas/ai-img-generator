@@ -91,14 +91,12 @@ def health() -> JSONResponse:
 async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     """FastAPI's 422 lists every error; answer with one sentence about the first, in the usual shape."""
     error = exc.errors()[0]
-    # For malformed JSON the location holds a character offset, not a field name.
     field = "" if error["type"] == "json_invalid" else ".".join(str(p) for p in error["loc"] if p != "body")
     where = f"the field '{field}'" if field else "the request body"
     return JSONResponse({"detail": f"Check {where}: {error['msg']}"}, status_code=422)
 
 
 async def server_error(request: Request, exc: Exception) -> JSONResponse:
-    # Uvicorn logs the traceback; the user gets a sentence instead of a bare "Internal Server Error".
     return JSONResponse({"detail": "Something went wrong on our side. Please try again."}, status_code=500)
 
 
@@ -114,12 +112,11 @@ def create_app() -> FastAPI:
     app.add_exception_handler(RequestValidationError, validation_error)
     app.add_exception_handler(Exception, server_error)
 
-    # The last middleware added runs first, so the counter also sees requests require_json refuses.
     app.middleware("http")(deps.require_json)
 
     @app.middleware("http")
     async def count_requests(request: Request, call_next):
-        if request.url.path != HEALTH_PATH:  # Docker and Nginx probes would drown the real traffic
+        if request.url.path != HEALTH_PATH:
             request.app.state.requests.record()
         return await call_next(request)
 

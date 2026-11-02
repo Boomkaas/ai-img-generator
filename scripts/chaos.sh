@@ -1,16 +1,4 @@
 #!/bin/sh
-# Run on the Swarm manager against a deployed stack: kills one worker container, then one API container, then
-# the controller, each with SIGKILL and with jobs waiting, and after each kill checks that
-#   - every job that was waiting at the kill still finishes as done,
-#   - the killed service is running at its full replica count again within 60 s,
-#   - none of the round's jobs is left running.
-# Prints PASS or FAIL per check and a summary; exits 1 if anything failed.
-#
-#   scripts/chaos.sh [https://<domain>]        (default https://localhost)
-#
-# JOBS (default 4) users each submit one 256 px job per round; JOB_TIMEOUT_S (default 1800) is how long a
-# round's jobs may take to finish. Containers on other machines are killed over ssh to the node's hostname.
-# Needs curl and jq. It signs up throwaway users, so point it at a test deployment.
 set -eu
 
 site=${1:-https://localhost}
@@ -27,7 +15,7 @@ for tool in curl jq docker; do
     command -v "$tool" > /dev/null || { echo "$tool is required" >&2; exit 2; }
 done
 
-check() {  # check <ok: 0 or 1> <message>
+check() {
     if [ "$1" -eq 0 ]; then line="PASS $2"; else line="FAIL $2"; failures=$((failures + 1)); fi
     echo "$line"
     summary="$summary
@@ -41,7 +29,7 @@ psql_query() {
 
 uuid() { cat /proc/sys/kernel/random/uuid; }
 
-api() {  # api <user> <method> <path> [json body]
+api() {
     if [ $# -ge 4 ]; then
         curl -sk -b "$work/$1" -c "$work/$1" -X "$2" -H 'Content-Type: application/json' \
             -H "Idempotency-Key: $(uuid)" -d "$4" "$site$3"
@@ -50,7 +38,7 @@ api() {  # api <user> <method> <path> [json body]
     fi
 }
 
-sign_up() {  # Nginx allows ten sign-ups a minute from one address, plus a burst of five
+sign_up() {
     while :; do
         code=$(curl -sk -o /dev/null -w '%{http_code}' -c "$work/$1" -H 'Content-Type: application/json' \
             -d "{\"email\":\"chaos-$(uuid)@example.com\",\"password\":\"chaos-test-password\"}" \
@@ -61,11 +49,11 @@ sign_up() {  # Nginx allows ten sign-ups a minute from one address, plus a burst
     done
 }
 
-running_tasks() {  # the service's tasks that should be running: "<task id> <current state>"
+running_tasks() {
     docker service ps "${stack}_$1" --filter desired-state=running --format '{{.ID}} {{.CurrentState}}'
 }
 
-kill_one() {  # SIGKILL one running container of the service, wherever it runs; prints the task id
+kill_one() {
     task=$(running_tasks "$1" | awk '$2 == "Running" {print $1; exit}')
     [ -n "$task" ] || { echo "no running task of ${stack}_$1" >&2; exit 1; }
     container=$(docker inspect -f '{{.Status.ContainerStatus.ContainerID}}' "$task")
@@ -78,7 +66,7 @@ kill_one() {  # SIGKILL one running container of the service, wherever it runs; 
     echo "$task"
 }
 
-back_in() {  # seconds until the service runs its full replica count again without the killed task, or -1
+back_in() {
     started=$(date +%s)
     while [ $(($(date +%s) - started)) -le "$back_within" ]; do
         desired=$(docker service inspect -f '{{.Spec.Mode.Replicated.Replicas}}' "${stack}_$1")
@@ -108,7 +96,7 @@ for service in worker api controller; do
 }$id"
         i=$((i + 1))
     done
-    sleep 3  # let the first jobs start
+    sleep 3
     in_list=$(ids_sql "$ids")
     waiting=$(psql_query "SELECT id FROM tasks WHERE id IN ($in_list) AND status = 'queued'")
     killed=$(kill_one "$service")

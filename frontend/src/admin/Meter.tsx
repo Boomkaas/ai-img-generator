@@ -1,8 +1,6 @@
 import { LOAD_WARN_PERCENT } from "../config";
 
-/** A short bar and its percentage; a `load` meter turns the warn colour when the machine is nearly full. */
 export function Meter({ percent, load = false }: { percent: number; load?: boolean }) {
-  // Judged on the number shown, so "85%" is never in the normal colour.
   const shown = Math.round(percent);
   const warn = load && shown >= LOAD_WARN_PERCENT;
   return (

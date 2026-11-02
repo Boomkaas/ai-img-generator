@@ -114,9 +114,6 @@ def tasks_of(user_id):
         return tx.execute(stmt).all()
 
 
-# --- Submit -------------------------------------------------------------------------------------------------
-
-
 def test_submit_returns_202_and_enqueues_with_the_database_id(user, celery):
     response = submit(user, prompt="  a lighthouse at dusk  ", size=512)
     assert response.status_code == 202
@@ -165,13 +162,12 @@ def test_the_same_idempotency_key_returns_the_same_task(user, celery):
     assert first.status_code == second.status_code == 202
     assert first.json()["task_id"] == second.json()["task_id"]
     assert len(tasks_of(user_id_of(user))) == 1
-    # Still queued, so the retry sends it again; both messages carry the one task id.
     assert [sent.id for sent in celery.sent] == [UUID(first.json()["task_id"])] * 2
 
 
 def test_a_retry_enqueues_a_task_whose_first_request_died_before_enqueueing(user, celery):
     key = uuid4()
-    with db.transaction() as tx:  # committed, but the API process died before send_generate
+    with db.transaction() as tx:
         lost = db.insert_task(tx, user_id_of(user), "a cat", 256, key)
 
     response = submit(user, key=key)
@@ -214,7 +210,7 @@ def test_enqueue_failure_fails_the_task_and_answers_503(user, celery):
     assert shown["error_message"] == "queue unavailable"
 
     celery.fail = False
-    assert submit(user).status_code == 202  # the failed task doesn't count against the cap
+    assert submit(user).status_code == 202
 
 
 @pytest.mark.parametrize(
@@ -232,8 +228,6 @@ def test_invalid_submit_is_422_with_the_reason(user, prompt, size, message, cele
     assert tasks_of(user_id_of(user)) == []
     assert celery.sent == []
 
-
-# --- Authorisation ------------------------------------------------------------------------------------------
 
 TASK_ID = "00000000-0000-4000-8000-000000000000"
 
@@ -264,9 +258,6 @@ def test_another_users_task_looks_missing(user, other, celery):
     assert user.delete(f"/api/tasks/{task_id}").status_code == 404
     assert db.get_task(task_id).status == "queued"
     assert celery.revoked == []
-
-
-# --- Status, active task, one task --------------------------------------------------------------------------
 
 
 def test_status_counts_match_the_rows(user):
@@ -315,9 +306,6 @@ def test_a_finished_task_has_no_live_fields(user):
         assert item[field] is None
 
 
-# --- History ------------------------------------------------------------------------------------------------
-
-
 def test_history_pages_newest_first(user):
     finished_rows(user_id_of(user), 25)
 
@@ -346,9 +334,6 @@ def test_history_shows_only_your_own_tasks(user, other):
     assert user.get("/api/tasks").json() == {"items": [], "next_before": None}
 
 
-# --- Image --------------------------------------------------------------------------------------------------
-
-
 def test_image_is_404_until_done_then_streams_the_stored_bytes(user, bucket):
     task_id = submit(user).json()["task_id"]
     assert user.get(f"/api/tasks/{task_id}/image").status_code == 404
@@ -357,7 +342,7 @@ def test_image_is_404_until_done_then_streams_the_stored_bytes(user, bucket):
     key = f"results/{task_id}.png"
     storage.put_png(key, png)
     assert db.claim_task(task_id, worker_host="nodeB-worker-1")
-    assert user.get(f"/api/tasks/{task_id}/image").status_code == 404  # running
+    assert user.get(f"/api/tasks/{task_id}/image").status_code == 404
     assert db.finish_task(task_id, "done", result_key=key)
 
     response = user.get(f"/api/tasks/{task_id}/image")
@@ -373,14 +358,11 @@ def test_image_missing_from_storage_is_404(user, bucket):
     assert user.get(f"/api/tasks/{task.id}/image").status_code == 404
 
 
-# --- Cancel -------------------------------------------------------------------------------------------------
-
-
 def test_cancel_a_queued_task(user, celery, redis_live):
     task_id = submit(user).json()["task_id"]
     channel = redis_live.pubsub(ignore_subscribe_messages=True)
     channel.subscribe(live.user_channel(user_id_of(user)))
-    channel.get_message(timeout=1)  # the subscribe confirmation
+    channel.get_message(timeout=1)
 
     response = user.delete(f"/api/tasks/{task_id}")
     assert response.status_code == 200
@@ -407,7 +389,7 @@ def test_cancel_a_running_task(user, celery):
     assert user.delete(f"/api/tasks/{task.id}").json() == {"status": "cancelled"}
     assert db.get_task(task.id).status == "cancelled"
     assert live.cancel_requested(task.id)
-    assert not db.finish_task(task.id, "done", result_key="results/x.png")  # the worker's finish is refused
+    assert not db.finish_task(task.id, "done", result_key="results/x.png")
 
 
 def test_cancelling_a_done_task_changes_nothing(user, celery):
@@ -447,9 +429,6 @@ def test_admin_cancel_is_403_for_a_normal_user(user, other):
     task_id = submit(other).json()["task_id"]
     assert user.delete(f"/api/admin/tasks/{task_id}").status_code == 403
     assert db.get_task(task_id).status == "queued"
-
-
-# --- Concurrency --------------------------------------------------------------------------------------------
 
 
 def test_concurrent_submits_across_instances_respect_the_cap(make_client, celery):

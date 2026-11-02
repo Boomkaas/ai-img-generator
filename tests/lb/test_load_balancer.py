@@ -41,7 +41,6 @@ def test_requests_are_spread_over_both_servers(stack, make_client):
         now = stack.api_requests()
         return {machine: now.get(machine, 0) - before.get(machine, 0) for machine in ("api-a", "api-b")}
 
-    # Each heartbeat reports a rolling minute, so both counters must have gone up by a good share of the 100.
     wait_for(lambda: min(risen().values()) >= 30, 10, lambda: f"requests counted per server: {risen()}")
 
 
@@ -49,17 +48,15 @@ def test_when_an_api_server_dies_requests_sockets_and_retries_carry_on(stack, ma
     user = make_client(API_A)
     proxied = through_nginx(user)
     key = uuid4()
-    first = user.submit_response(key=key)  # this one reached api_a before it died
+    first = user.submit_response(key=key)
     assert first.status_code == 202
 
     with ExitStack() as opened:
-        # Each Nginx worker process counts connections on its own, so two sockets can land on the same server;
-        # open them until both servers hold some.
         sockets = []
         while not (on := stack.api_sockets()).get("api-a") or not on.get("api-b"):
             assert len(sockets) < 10, f"Nginx sent every socket to one server: {on}"
             sockets.append(opened.enter_context(proxied.websocket()))
-            receive(sockets[-1])  # the snapshot
+            receive(sockets[-1])
             wait_for(lambda: sum(stack.api_sockets().values()) == len(sockets), 10, stack.api_sockets)
         stack.stop_api("api_a")
 
@@ -73,9 +70,9 @@ def test_when_an_api_server_dies_requests_sockets_and_retries_carry_on(stack, ma
                 closed += 1
             except TimeoutError:
                 pass
-        assert closed == on["api-a"]  # exactly the sockets on api_a dropped
+        assert closed == on["api-a"]
 
-        with proxied.websocket() as again:  # what the page does after a drop
+        with proxied.websocket() as again:
             assert receive(again)["type"] == "snapshot"
 
     for _ in range(20):
@@ -93,13 +90,13 @@ def test_a_queued_users_socket_outlives_the_default_proxy_timeout(stack, make_cl
     t = user.submit()
     seen = Counter()
     with user.websocket() as socket:
-        end = time.monotonic() + 90  # Nginx's default proxy_read_timeout is 60 s
+        end = time.monotonic() + 90
         while time.monotonic() < end:
             message = receive(socket, timeout=30)
             seen[message["type"]] += 1
             if message["type"] == "task":
                 assert message["id"] == t and message["status"] == "queued" and message["position"] == 1
-        assert receive(socket, timeout=30)  # still open
+        assert receive(socket, timeout=30)
     assert seen["snapshot"] == 1
     assert seen["system"] >= 10
     assert seen["ping"] >= 3
@@ -118,6 +115,6 @@ def test_more_than_fifteen_logins_a_minute_get_429():
     wrong = {"email": "nobody@example.com", "password": PASSWORD}
     with httpx.Client(base_url=NGINX, verify=False) as http:
         statuses = [http.post("/api/auth/login", json=wrong).status_code for _ in range(16)]
-    assert statuses[:6] == [401] * 6  # one at the rate plus a burst of five
+    assert statuses[:6] == [401] * 6
     assert statuses[-1] == 429
     assert set(statuses) == {401, 429}

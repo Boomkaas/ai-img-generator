@@ -1,12 +1,4 @@
 #!/bin/sh
-# Run on the manager: deploys (or updates) the stack with the images tagged <tag>.
-#
-#   scripts/swarm/deploy.sh <tag> [extra stack file ...]
-#   scripts/swarm/deploy.sh 1.0.0
-#   scripts/swarm/deploy.sh dev infra/stack.dev-swarm.yml      (one-machine smoke run)
-#
-# Settings come from infra/.env.prod (ENV_FILE overrides the path); copy it from infra/.env.prod.example.
-# The passwords must already be Swarm secrets (scripts/swarm/create-secrets.sh).
 set -eu
 
 if [ $# -lt 1 ]; then
@@ -14,7 +6,6 @@ if [ $# -lt 1 ]; then
     exit 2
 fi
 
-# Paths given on the command line are relative to where the script was started, not to the repository.
 absolute() {
     case $1 in
         /*) printf '%s' "$1" ;;
@@ -47,5 +38,4 @@ files="-c $repo/infra/stack.yml"
 for extra in "$@"; do
     files="$files -c $(absolute "$extra")"
 done
-# The stack name is fixed: the controller scales imagegen_worker.
 docker stack deploy $files imagegen --with-registry-auth

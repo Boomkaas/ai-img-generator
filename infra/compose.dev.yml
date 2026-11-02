@@ -1,5 +1,3 @@
-# Local development services: make dev-up
-# Host ports can be overridden when taken, e.g. POSTGRES_PORT=5433 make dev-up (then match DATABASE_URL in .env).
 name: imagegen-dev
 
 services:
@@ -33,7 +31,7 @@ services:
       retries: 10
 
   minio:
-    image: pgsty/minio  # community build: upstream stopped publishing images
+    image: pgsty/minio
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: imagegen
@@ -49,7 +47,6 @@ services:
       timeout: 3s
       retries: 10
 
-  # One-shot: creates the bucket, then exits 0.
   minio-init:
     image: pgsty/mc
     depends_on:

@@ -27,7 +27,7 @@ def main(argv: list[str]) -> int:
         return 2
     model_id, revision, directory = argv
     snapshot_download(model_id, revision=revision, local_dir=directory, allow_patterns=PATTERNS)
-    shutil.rmtree(Path(directory) / ".cache", ignore_errors=True)  # download bookkeeping, not weights
+    shutil.rmtree(Path(directory) / ".cache", ignore_errors=True)
     return 0
 
 

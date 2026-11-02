@@ -8,9 +8,7 @@ export interface Draft {
 
 export interface State {
   system: SystemStatus | null;
-  /** The task on screen: queued or running, or the finished one whose result is showing. */
   task: TaskOut | null;
-  /** Ids that had task_final; a task message for one of them arrived late and is ignored. */
   finished: string[];
   draft: Draft;
 }
@@ -34,7 +32,6 @@ export const initialState: State = {
   draft: { prompt: "", size: DEFAULT_SIZE },
 };
 
-// A task only moves forward: queued, running, then finished.
 const RANK: Record<TaskStatus, number> = { queued: 0, running: 1, done: 2, failed: 2, cancelled: 2 };
 
 export const isActive = (task: TaskOut | null) => task !== null && RANK[task.status] < 2;
@@ -53,8 +50,6 @@ export function reducer(state: State, action: Action): State {
     case "snapshot": {
       const task = action.task;
       if (task && !state.finished.includes(task.task_id)) return { ...state, system: action.system, task };
-      // No active task while one is on screen as active: it ended while the socket was down, and the page
-      // fetches it to settle. A finished result on screen stays.
       return { ...state, system: action.system };
     }
     case "system":
@@ -80,7 +75,6 @@ export function reducer(state: State, action: Action): State {
       if (action.status === "cancelled" && state.task?.task_id === action.id) {
         return backToForm(state, state.task);
       }
-      // Done and failed wait for the full task, fetched by the page, before the view changes.
       return { ...state, finished };
     }
     case "restored":

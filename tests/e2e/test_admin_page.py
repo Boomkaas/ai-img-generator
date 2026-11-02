@@ -43,7 +43,7 @@ def test_admin_page_lists_machines_workers_and_tasks_and_cancels(page, stack, ma
     queued.get_by_role("button", name="Cancel").click()
     expect(queued).to_contain_text("Cancel this task?")
     queued.get_by_role("button", name="Yes").click()
-    expect(queued).to_have_count(0)  # gone from the next overview
+    expect(queued).to_have_count(0)
     assert stack.db.task(waiting_id).status == "cancelled"
     assert stack.db.task(running_id).status == "running"
     expect(page.locator(".block-head", has_text="Tasks")).to_contain_text("1 running · 0 waiting")

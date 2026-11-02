@@ -1,8 +1,3 @@
-# Release notes from the Conventional Commits, for git-cliff:
-#   git-cliff --latest --strip header      the notes of the newest tag (the release workflow)
-#   git-cliff --unreleased                 what the next release would contain
-# Only features, fixes, tests and docs are listed; ci, build, chore and refactor commits are left out.
-
 [changelog]
 header = "# Changelog\n"
 body = """
@@ -24,7 +19,6 @@ trim = true
 conventional_commits = true
 filter_unconventional = true
 split_commits = false
-# The HTML comments only fix the order of the groups; striptags removes them from the output.
 commit_parsers = [
   { message = "^feat", group = "<!-- 0 -->Features" },
   { message = "^fix", group = "<!-- 1 -->Fixes" },

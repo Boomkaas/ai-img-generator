@@ -17,6 +17,5 @@ COPY common/ common/
 COPY controller/ controller/
 COPY --chmod=755 infra/docker/controller-entrypoint.sh /usr/local/bin/controller-entrypoint
 
-# The entrypoint drops to the app user before starting Python.
 ENTRYPOINT ["controller-entrypoint"]
 CMD ["python", "-m", "controller.main"]

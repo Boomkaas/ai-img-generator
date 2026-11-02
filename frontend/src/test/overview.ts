@@ -1,6 +1,5 @@
 import type { AdminOverview } from "../api/types";
 
-/** Two running and two waiting tasks, out of order: the page sorts them itself. */
 export function overview(fields: Partial<AdminOverview> = {}): AdminOverview {
   return {
     type: "admin",
