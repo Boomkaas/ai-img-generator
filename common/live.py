@@ -27,17 +27,14 @@ from common.messages import Alert, FinishedStatus, TaskFinal, TaskUpdate, Worker
 
 log = logging.getLogger(__name__)
 
-# --- Keys and channels --------------------------------------------------------------------------------------
-
-GENERATION_QUEUE = "image_generation"  # the Celery queue, a Redis list under this name
-# kombu's Redis transport moves a message here when a worker takes it, and deletes it on the acknowledgement.
+GENERATION_QUEUE = "image_generation"
 BROKER_UNACKED_KEYS = ("unacked", "unacked_index")
 SYSTEM_CHANNEL = "system"
 ADMIN_CHANNEL = "admin"
 AUTOSCALER_KEY = "controller:autoscaler"
 ALERTS_KEY = "controller:alerts"
 _USER_PREFIX = "user:"
-USER_CHANNEL_PATTERN = f"{_USER_PREFIX}*"  # each API process subscribes to this once
+USER_CHANNEL_PATTERN = f"{_USER_PREFIX}*"
 _WORKER_PREFIX = "hb:worker:"
 _API_PREFIX = "hb:api:"
 _MACHINE_PREFIX = "hb:machine:"
@@ -75,9 +72,6 @@ def machine_key(name: str) -> str:
 def alert_sent_key(message: str) -> str:
     """Set while `message` must not reach the webhook again."""
     return f"alert:sent:{hashlib.sha256(message.encode()).hexdigest()[:16]}"
-
-
-# --- Clients ------------------------------------------------------------------------------------------------
 
 
 @lru_cache
@@ -122,9 +116,6 @@ def redis_run_id() -> str:
     return client().info("server")["run_id"]
 
 
-# --- Pub/sub and progress -----------------------------------------------------------------------------------
-
-
 def publish(channel: str, message: BaseModel) -> None:
     client().publish(channel, message.model_dump_json())
 
@@ -157,9 +148,6 @@ def publish_task_final(user_id, task_id, status: FinishedStatus) -> None:
     publish(user_channel(user_id), TaskFinal(id=task_id, status=status))
 
 
-# --- Cancellation -------------------------------------------------------------------------------------------
-
-
 def request_cancel(task_id, ttl: int | None = None) -> None:
     client().set(cancel_key(task_id), "1", ex=ttl or get_settings().CANCEL_FLAG_TTL_S)
 
@@ -172,16 +160,13 @@ def clear_task_keys(task_id) -> None:
     client().delete(progress_key(task_id), cancel_key(task_id))
 
 
-# --- Heartbeats ---------------------------------------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class WorkerHeartbeat:
     host: str
     state: WorkerState
     task_id: str | None
-    since: float  # epoch seconds of the last state change
-    started: float  # epoch seconds the worker process started; a restart under the same name changes it
+    since: float
+    started: float
     machine: str
     machine_cpu: float
     machine_ram: float
@@ -206,8 +191,6 @@ class MachineHeartbeat:
     machine_ram: float
 
 
-# In-process state of each worker this process runs, keyed by host; the heartbeat thread publishes it.
-# The lock is held through each write, so writes reach Redis in order and an older beat never lands last.
 _workers: dict[str, dict] = {}
 _workers_lock = threading.Lock()
 
@@ -220,7 +203,6 @@ def machine_of(host: str) -> str:
 
 
 def _machine_figures() -> dict:
-    # Whole-machine figures, even inside a container: what the Machines block shows.
     return {"machine_cpu": psutil.cpu_percent(interval=None), "machine_ram": psutil.virtual_memory().percent}
 
 
@@ -328,7 +310,6 @@ def worker_heartbeats() -> list[WorkerHeartbeat]:
             state=data["state"],
             task_id=data["task_id"] or None,
             since=float(data["since"]),
-            # A worker of an older image writes no start time; its first state change stands in for it.
             started=float(data.get("started") or data["since"]),
             machine=data["machine"],
             machine_cpu=float(data["machine_cpu"]),
@@ -391,8 +372,6 @@ def machine_heartbeats() -> list[MachineHeartbeat]:
     ]
 
 
-# --- Controller state ---------------------------------------------------------------------------------------
-
 _AUTOSCALER_INTS = ("desired", "ready", "starting", "maximum")
 
 
@@ -423,9 +402,7 @@ def alert(message: str) -> None:
     pipe.execute()
     if not settings.ALERT_WEBHOOK_URL:
         return
-    # The marker lives in Redis, so a restarted controller doesn't send the same message again right away.
     if client().set(alert_sent_key(message), "1", nx=True, ex=settings.ALERT_REPEAT_AFTER_S):
-        # A thread, so a slow or dead webhook never holds up the controller's tick.
         threading.Thread(
             target=post_alert,
             args=(settings.ALERT_WEBHOOK_URL, message, settings.ALERT_WEBHOOK_TIMEOUT_S),

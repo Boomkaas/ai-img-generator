@@ -23,17 +23,16 @@ from websockets.sync.client import connect
 SIZES = (256, 384, 512, 640, 768)
 PROMPTS = ("a lighthouse at dusk", "a red bicycle in the rain", "a bowl of ramen", "a fox in the snow")
 PASSWORD = "load-test-password"
-SIGN_UP_RETRY_S = 7  # a little over Nginx's one sign-up every six seconds
+SIGN_UP_RETRY_S = 7
 TOLERANCE = 0.25
 JOB_TIMEOUT_S = 3 * 3600
 
-finished: list[tuple[int, float, float]] = []  # (size, shown ready_in_s, actual seconds)
+finished: list[tuple[int, float, float]] = []
 refusals = 0
 not_done: list[str] = []
 
 
 def insecure_ssl() -> ssl.SSLContext:
-    # Only the timing is under test; a lab deployment's certificate is often self-signed.
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
@@ -75,7 +74,7 @@ class ImageUser(HttpUser):
             additional_headers={"Cookie": cookie, "Origin": self.host},
             ssl=insecure_ssl() if url.startswith("wss://") else None,
         ) as socket:
-            json.loads(socket.recv(timeout=30))  # the snapshot
+            json.loads(socket.recv(timeout=30))
             while True:
                 with self.client.post(
                     "/api/tasks",
@@ -83,7 +82,7 @@ class ImageUser(HttpUser):
                     headers={"Idempotency-Key": key},
                     catch_response=True,
                 ) as response:
-                    if response.status_code == 401:  # a long wait outlived the access token
+                    if response.status_code == 401:
                         response.success()
                         self.client.post("/api/auth/refresh", json={})
                         continue
@@ -118,7 +117,6 @@ class ImageUser(HttpUser):
     def _follow(self, socket, task_id: str, submitted: float) -> str:
         """Read the socket until the task ends; its final status."""
         while time.monotonic() - submitted < JOB_TIMEOUT_S:
-            # The server pings every 25 s, so a minute of silence means the socket is gone.
             message = json.loads(socket.recv(timeout=60))
             if message["type"] == "task_final" and message["id"] == task_id:
                 return message["status"]

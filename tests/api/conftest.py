@@ -97,7 +97,7 @@ def make_client(migrated_db, redis_live, monkeypatch):
     def make(app=None) -> TestClient:
         client = TestClient(app or create_app())
         client.event_hooks["response"] = [_no_password_hash]
-        client.__enter__()  # runs the lifespan
+        client.__enter__()
         clients.append(client)
         return client
 
@@ -114,7 +114,6 @@ def client(make_client) -> TestClient:
 
 @pytest.fixture(scope="session")
 def minio():
-    # Community build of MinIO, as in the compose files.
     with MinioContainer(
         "pgsty/minio", access_key="imagegen-test", secret_key="imagegen-test-secret"
     ) as container:

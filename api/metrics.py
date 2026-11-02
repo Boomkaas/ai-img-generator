@@ -12,7 +12,7 @@ class RequestCounter:
     def __init__(self, window_s: int, clock: Callable[[], float] = time.monotonic):
         self._window = window_s
         self._clock = clock
-        self._buckets: deque[list[int]] = deque()  # [second, count], oldest first
+        self._buckets: deque[list[int]] = deque()
         self._lock = threading.Lock()
 
     def record(self) -> None:

@@ -11,7 +11,7 @@ from controller.main import ControllerState
 
 pytestmark = pytest.mark.unit
 
-NOW = 1_800_000_000.0  # the fixed clock every tick here runs on
+NOW = 1_800_000_000.0
 RUN_ID = "run-1"
 
 
@@ -115,7 +115,6 @@ class FakeStorage:
 
 @pytest.fixture(autouse=True)
 def settings(monkeypatch):
-    # The defaults, whatever a local .env says.
     for name, value in {
         "ORPHAN_AFTER_S": "60",
         "FORCE_STOP_AFTER_S": "60",
@@ -146,9 +145,6 @@ def fakes(monkeypatch):
 def state():
     """A controller that has been running a while: it knows the current Redis and cleaned up just now."""
     return ControllerState(redis_run_id=RUN_ID, redis_changed_at=NOW - 3600, last_cleanup=NOW)
-
-
-# --- 1. Running tasks no worker is working on ---------------------------------------------------------------
 
 
 def test_orphan_is_failed_only_after_60_seconds(fakes, state):
@@ -187,7 +183,7 @@ def test_nothing_is_published_when_the_worker_finished_first(fakes, state):
 def test_orphans_wait_for_heartbeats_after_redis_restarts(fakes, state):
     working = task(db.RUNNING, started=0)
     fakes.db.tasks = [working]
-    fakes.live.run_id = "run-2"  # Redis came back empty: no heartbeats yet
+    fakes.live.run_id = "run-2"
 
     sweeper.sweep(NOW + 100, state)
     sweeper.sweep(NOW + 110, state)
@@ -203,15 +199,12 @@ def test_orphan_is_failed_once_the_restart_pause_is_over(fakes, state):
     fakes.db.tasks = [orphan]
     fakes.live.run_id = "run-2"
 
-    sweeper.sweep(NOW + 100, state)  # sees the restart
+    sweeper.sweep(NOW + 100, state)
     sweeper.sweep(NOW + 114, state)
     assert fakes.db.finished == []
 
-    sweeper.sweep(NOW + 115, state)  # HEARTBEAT_TTL_S later, still no heartbeat lists it
+    sweeper.sweep(NOW + 115, state)
     assert [entry[0] for entry in fakes.db.finished] == [orphan.id]
-
-
-# --- 2. A worker still busy with a task cancelled long ago --------------------------------------------------
 
 
 def test_stuck_cancel_gets_one_terminating_revoke(fakes, state):
@@ -254,9 +247,6 @@ def test_busy_worker_on_a_live_task_is_not_stopped(fakes, state):
     assert fakes.celery.revoked == []
 
 
-# --- 3. Re-sending queued tasks after a Redis restart -------------------------------------------------------
-
-
 def test_changed_run_id_resends_every_queued_task_once(fakes, state):
     queued = [task(db.QUEUED), task(db.QUEUED)]
     fakes.db.tasks = [*queued, task(db.RUNNING, started=0)]
@@ -297,10 +287,7 @@ def test_run_id_is_kept_until_every_task_was_sent(fakes, state):
 
     sweeper.sweep(NOW, state)
 
-    assert state.redis_run_id == RUN_ID  # tried again next tick
-
-
-# --- 4. History cleanup -------------------------------------------------------------------------------------
+    assert state.redis_run_id == RUN_ID
 
 
 def test_cleanup_runs_at_most_every_ten_minutes(fakes):
@@ -351,9 +338,6 @@ def test_cleanup_never_touches_active_tasks(fakes, state):
     assert fakes.db.tasks == active
 
 
-# --- Independence of the parts ------------------------------------------------------------------------------
-
-
 def test_one_sweeper_part_raising_does_not_stop_the_others(fakes, monkeypatch):
     def broken(started_before=None):
         raise RuntimeError("postgres hiccup")
@@ -366,8 +350,8 @@ def test_one_sweeper_part_raising_does_not_stop_the_others(fakes, monkeypatch):
 
     sweeper.sweep(NOW, state)
 
-    assert fakes.celery.sent == [queued.id]  # part 3 ran
-    assert ("query", 50) in fakes.log  # part 4 ran
+    assert fakes.celery.sent == [queued.id]
+    assert ("query", 50) in fakes.log
 
 
 def test_one_controller_part_raising_does_not_stop_the_others(monkeypatch):
@@ -393,7 +377,7 @@ def test_stop_ends_the_loop_after_the_current_tick(monkeypatch):
 
     def one_tick(now, state):
         ticks.append(now)
-        stop.set()  # as SIGTERM would, mid-tick
+        stop.set()
 
     monkeypatch.setattr(main, "tick", one_tick)
     main.run(stop)

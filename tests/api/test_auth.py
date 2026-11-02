@@ -32,7 +32,7 @@ def login(client, email, password=PASSWORD):
 
 
 def post(client, path, **kwargs):
-    return client.post(path, json={}, **kwargs)  # an empty JSON body: POSTs must be JSON
+    return client.post(path, json={}, **kwargs)
 
 
 def set_cookies(response) -> dict:
@@ -56,9 +56,6 @@ def tokens_of(email):
         return tx.execute(stmt).all()
 
 
-# --- Register -----------------------------------------------------------------------------------------------
-
-
 def test_register_sets_both_cookies_with_the_right_flags(client):
     response = register(client, "new@example.com")
     assert response.status_code == 201
@@ -70,7 +67,7 @@ def test_register_sets_both_cookies_with_the_right_flags(client):
     for morsel in (access, refresh):
         assert morsel["httponly"] is True
         assert morsel["samesite"].lower() == "strict"
-        assert not morsel["secure"]  # COOKIE_SECURE=false in tests
+        assert not morsel["secure"]
     assert access["path"] == "/"
     assert int(access["max-age"]) == settings.ACCESS_TOKEN_TTL_S == 15 * 60
     assert refresh["path"] == "/api/auth"
@@ -140,10 +137,7 @@ def test_a_post_that_is_not_json_is_refused(client):
     )
     assert response.status_code == 415
     assert "application/json" in response.json()["detail"]
-    assert client.post("/api/auth/logout").status_code == 415  # no Content-Type at all
-
-
-# --- Login --------------------------------------------------------------------------------------------------
+    assert client.post("/api/auth/logout").status_code == 415
 
 
 def test_login_sets_both_cookies(make_client):
@@ -183,9 +177,6 @@ def test_passwords_and_hashes_never_reach_the_log(client, caplog):
     assert "password_hash" not in caplog.text
 
 
-# --- Current user -------------------------------------------------------------------------------------------
-
-
 def test_me_without_a_cookie_is_401(client):
     response = client.get("/api/auth/me")
     assert response.status_code == 401
@@ -219,9 +210,6 @@ def test_a_token_signed_with_another_key_is_401(client):
     assert client.get("/api/auth/me", headers=cookie_header(access_token=forged)).status_code == 401
 
 
-# --- Refresh ------------------------------------------------------------------------------------------------
-
-
 def test_refresh_replaces_the_token_and_a_reused_one_ends_every_session(client):
     register(client, "rot@example.com")
     first = client.cookies["refresh_token"]
@@ -237,7 +225,6 @@ def test_refresh_replaces_the_token_and_a_reused_one_ends_every_session(client):
     client.cookies.clear()
     stolen = post(client, "/api/auth/refresh", headers=cookie_header(refresh_token=first))
     assert stolen.status_code == 401
-    # The first token was used before, so someone copied it: every token of the user is now revoked.
     assert all(row.revoked_at is not None for row in tokens_of("rot@example.com"))
     assert post(client, "/api/auth/refresh", headers=cookie_header(refresh_token=second)).status_code == 401
 
@@ -253,9 +240,6 @@ def test_refresh_with_an_expired_token_is_401(client):
     with db.transaction() as tx:
         tx.execute(update(db.refresh_tokens).values(expires_at=func.now() - timedelta(seconds=1)))
     assert post(client, "/api/auth/refresh").status_code == 401
-
-
-# --- Logout -------------------------------------------------------------------------------------------------
 
 
 def test_logout_revokes_the_token_and_clears_the_cookies(client):
@@ -276,9 +260,6 @@ def test_logout_revokes_the_token_and_clears_the_cookies(client):
 
 def test_logout_without_a_cookie_is_still_204(client):
     assert post(client, "/api/auth/logout").status_code == 204
-
-
-# --- Statelessness and roles --------------------------------------------------------------------------------
 
 
 def test_a_cookie_from_one_api_instance_works_on_another(make_client):
@@ -303,5 +284,4 @@ def test_require_admin_refuses_users_and_admits_admins(make_client):
 
     register(admin_client, "boss@example.com")
     db.set_role(db.get_user_by_email("boss@example.com").id, "admin")
-    # The role comes from the database, so the cookie issued before the promotion already works.
     assert admin_client.get("/api/test/admin-only").status_code == 200

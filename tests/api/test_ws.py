@@ -85,9 +85,6 @@ def assert_closed_with(socket, code: int) -> None:
     assert closed.value.code == code
 
 
-# --- Handshake ----------------------------------------------------------------------------------------------
-
-
 def test_no_cookie_is_closed_with_4401(make_client):
     with connect(make_client()) as socket:
         assert_closed_with(socket, 4401)
@@ -135,11 +132,6 @@ def test_ping_arrives(make_client, monkeypatch):
         assert receive(socket) == {"type": "ping"}
 
 
-# --- Routing ------------------------------------------------------------------------------------------------
-# A socket's messages arrive in publishing order, so a socket whose next message is the `system` sent after
-# another one did not get that other one.
-
-
 def test_user_messages_reach_only_that_users_sockets(user, other, redis_live):
     wait_for_hubs(redis_live, 2)
     update = TaskUpdate(id=uuid4(), status="running", progress=40, stage="step 10 of 25")
@@ -176,11 +168,7 @@ def test_system_messages_reach_everyone(user, other, admin, redis_live):
             assert receive(socket) == json.loads(SYSTEM.model_dump_json())
 
 
-# --- Redis --------------------------------------------------------------------------------------------------
-
-
 def test_twenty_sockets_add_no_redis_connections(make_client, redis_live, monkeypatch):
-    # The heartbeat writes once at startup and not again during the test, so it can't open a connection.
     monkeypatch.setenv("HEARTBEAT_INTERVAL_S", "14")
     monkeypatch.setenv("WS_MAX_SOCKETS_PER_USER", "21")
     get_settings.cache_clear()
@@ -205,12 +193,10 @@ def test_after_losing_its_subscription_the_hub_resends_snapshots(user, redis_liv
         [subscriber] = pubsub_clients(redis_live)
         redis_live.client_kill_filter(_id=subscriber["id"])
 
-        # The task ends while the hub is away, so its final message reaches nobody.
         db.fail_queued(task.id, "queue unavailable")
         final = TaskFinal(id=task.id, status="failed").model_dump_json()
         assert redis_live.publish(live.user_channel(user_id_of(user)), final) == 0
 
-        # The socket was never closed; the fresh snapshot tells it the task is over.
         resent = receive(socket)
         assert resent["type"] == "snapshot"
         assert resent["task"] is None

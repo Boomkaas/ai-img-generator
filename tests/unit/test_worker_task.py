@@ -24,7 +24,7 @@ class FakeDb:
 
     def __init__(self):
         self.claim = True
-        self.claim_errors = 0  # this many claims fail as if the database were unreachable
+        self.claim_errors = 0
         self.finish = True
         self.status = db.QUEUED
         self.claims, self.finishes = [], []
@@ -41,7 +41,7 @@ class FakeDb:
     def finish_task(self, task_id, status, result_key=None, error=None):
         self.finishes.append({"status": status, "result_key": result_key, "error": error})
         if not self.finish:
-            self.status = db.CANCELLED  # a cancel won the race
+            self.status = db.CANCELLED
             return False
         self.status = status
         return True
@@ -53,7 +53,7 @@ class FakeDb:
 class FakeLive:
     def __init__(self, fake_db):
         self.db = fake_db
-        self.progress = []  # (progress, stage)
+        self.progress = []
         self.states = []
         self.cleared = []
         self.finals = []
@@ -200,7 +200,7 @@ def test_cancel_during_the_step_delay_stops_within_half_a_second(monkeypatch, fa
     run(task_id)
     stopped_at = time.monotonic()
     canceller.join()
-    assert stopped_at - cancelled_at[0] < 1.0  # well before the 2 s pause would have ended
+    assert stopped_at - cancelled_at[0] < 1.0
     assert fake_live.progress[-1] == (3, "step 1 of 25")
     assert_cleaned_up(fake_live, task_id, "cancelled")
 
@@ -221,7 +221,6 @@ def test_an_error_fails_the_task_with_a_shortened_message(monkeypatch, fake_db, 
 
 def test_database_outage_at_the_claim_is_retried(fake_db, fake_live, fake_storage, task_id):
     fake_db.claim_errors = 1
-    # apply() runs the retry in place instead of sending it back to the broker.
     result = tasks.generate_image.apply(args=[task_id, str(uuid4()), "a cat", 256])
     assert result.successful()
     assert len(fake_db.claims) == 2
@@ -267,7 +266,6 @@ def test_redis_down_during_the_job_still_finishes_it(monkeypatch, fake_db, fake_
 
 
 def test_pipeline_module_imports_without_torch():
-    # A fresh interpreter where importing torch or diffusers fails, whether or not they are installed.
     code = (
         "import sys\n"
         "sys.modules['torch'] = None\n"

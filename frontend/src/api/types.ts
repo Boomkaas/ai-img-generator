@@ -1,5 +1,3 @@
-// Everything the server sends. Ids are UUID strings, times ISO 8601 in UTC, durations seconds.
-
 export type TaskStatus = "queued" | "running" | "done" | "failed" | "cancelled";
 export type ActiveStatus = "queued" | "running";
 export type FinishedStatus = "done" | "failed" | "cancelled";
@@ -12,7 +10,6 @@ export interface SystemStatus {
   new_image_ready_in_s: number;
 }
 
-/** A partial update of the active task; fields that weren't sent are absent. */
 export interface TaskUpdate {
   type: "task";
   id: string;

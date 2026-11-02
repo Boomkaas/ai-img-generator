@@ -39,9 +39,7 @@ from common.config import get_settings
 QUEUED, RUNNING, DONE, FAILED, CANCELLED = "queued", "running", "done", "failed", "cancelled"
 ACTIVE_STATUSES = (QUEUED, RUNNING)
 FINISHED_STATUSES = (DONE, FAILED, CANCELLED)
-SUBMIT_LOCK_ID = 1  # pg_advisory_xact_lock key that serialises every submit
-
-# --- Tables: mirror migrations/versions/0001_initial_schema.py --------------------------------------------
+SUBMIT_LOCK_ID = 1
 
 metadata = MetaData()
 
@@ -94,8 +92,6 @@ Index(
     postgresql_where=tasks.c.status.in_(ACTIVE_STATUSES),
 )
 
-# --- Engine and transactions --------------------------------------------------------------------------------
-
 
 def normalise_url(url: str) -> str:
     """Use the psycopg 3 driver for plain postgresql:// URLs (the stack file uses those)."""
@@ -108,14 +104,12 @@ def normalise_url(url: str) -> str:
 @lru_cache
 def get_engine() -> Engine:
     settings = get_settings()
-    # No overflow: DB_POOL_SIZE is the hard per-process connection count used in the sizing.
     return create_engine(
         normalise_url(settings.DATABASE_URL),
         pool_size=settings.DB_POOL_SIZE,
         max_overflow=0,
         pool_timeout=settings.DB_POOL_TIMEOUT_S,
         pool_pre_ping=True,
-        # Without it libpq waits for the OS TCP timeout (minutes) when the database host stops answering.
         connect_args={"connect_timeout": settings.DB_CONNECT_TIMEOUT_S},
     )
 
@@ -160,9 +154,6 @@ def _as_datetime(value: datetime | float | None) -> datetime | None:
     return datetime.fromtimestamp(value, UTC)
 
 
-# --- Users --------------------------------------------------------------------------------------------------
-
-
 def create_user(email: str, password_hash: str, role: str = "user") -> Row:
     stmt = insert(users).values(email=email, password_hash=password_hash, role=role).returning(*users.c)
     return _one(stmt)
@@ -189,9 +180,6 @@ def set_password_hash(user_id, password_hash: str) -> bool:
 def set_role(user_id, role: str) -> bool:
     stmt = update(users).where(users.c.id == _uuid(user_id)).values(role=role).returning(users.c.id)
     return _one(stmt) is not None
-
-
-# --- Refresh tokens -----------------------------------------------------------------------------------------
 
 
 def insert_refresh_token(user_id, token_hash: str, expires_at: datetime) -> Row:
@@ -226,9 +214,6 @@ def revoke_all_refresh_tokens(user_id) -> int:
         .returning(refresh_tokens.c.id)
     )
     return len(_all(stmt))
-
-
-# --- Submit helpers: run inside one transaction() together --------------------------------------------------
 
 
 def advisory_lock(tx: Connection) -> None:
@@ -267,9 +252,6 @@ def insert_task(tx: Connection, user_id, prompt: str, size: int, idempotency_key
         .returning(*tasks.c)
     )
     return tx.execute(stmt).one()
-
-
-# --- Reads --------------------------------------------------------------------------------------------------
 
 
 def get_task(task_id, user_id=None) -> Row | None:
@@ -378,9 +360,6 @@ def tasks_beyond_history_limit(limit: int) -> Sequence[Row]:
     return _all(stmt)
 
 
-# --- Status changes: the only places tasks.status may change ------------------------------------------------
-
-
 def claim_task(task_id, worker_host: str) -> bool:
     """queued -> running. False if the task was cancelled or already claimed."""
     stmt = (
@@ -426,9 +405,6 @@ def fail_queued(task_id, error: str) -> bool:
         .returning(tasks.c.id)
     )
     return _one(stmt) is not None
-
-
-# --- Deletion -----------------------------------------------------------------------------------------------
 
 
 def delete_task(task_id) -> bool:

@@ -78,7 +78,7 @@ def test_no_more_password_hashes_run_at_once_than_configured(monkeypatch):
         ("a@b", False),
         ("two words@example.com", False),
         ("a@@example.com", False),
-        ("x" * 250 + "@example.com", False),  # longer than MAX_EMAIL_LEN
+        ("x" * 250 + "@example.com", False),
     ],
 )
 def test_email_looks_valid(email, ok):
@@ -115,7 +115,7 @@ def test_access_token_with_another_key_or_algorithm_is_refused():
 
 def test_refresh_token_is_random_and_only_its_hash_is_kept():
     token, token_hash, expires_at = security.new_refresh_token()
-    assert len(token) >= 43  # 32 bytes, URL-safe base64
+    assert len(token) >= 43
     assert token_hash == hashlib.sha256(token.encode()).hexdigest() != token
     assert security.new_refresh_token()[0] != token
     assert abs(expires_at - (datetime.now(UTC) + timedelta(days=7))) < timedelta(seconds=5)
@@ -160,7 +160,7 @@ def test_request_counter_keeps_a_rolling_window():
     now[0] = 1030.5
     counter.record()
     assert counter.count() == 4
-    now[0] = 1060.0  # the first three fell out of the window
+    now[0] = 1060.0
     assert counter.count() == 1
     now[0] = 1091.0
     assert counter.count() == 0

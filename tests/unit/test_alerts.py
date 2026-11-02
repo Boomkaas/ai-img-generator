@@ -17,7 +17,7 @@ MAX_QUEUED_TOTAL = 30
 class FakeLive:
     def __init__(self):
         self.desired = 1
-        self.workers = {}  # host -> (machine, process start time)
+        self.workers = {}
         self.alerts = []
 
     def autoscaler_state(self):

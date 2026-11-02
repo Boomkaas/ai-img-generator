@@ -30,7 +30,7 @@ def subscribe(redis_live):
     def open_channel(channel):
         pubsub = redis_live.pubsub()
         pubsub.subscribe(channel)
-        pubsub.get_message(timeout=1)  # the subscribe confirmation
+        pubsub.get_message(timeout=1)
         pubsubs.append(pubsub)
 
         def next_message():
@@ -43,9 +43,6 @@ def subscribe(redis_live):
     yield open_channel
     for pubsub in pubsubs:
         pubsub.close()
-
-
-# --- Progress and pub/sub -----------------------------------------------------------------------------------
 
 
 def test_progress_is_stored_with_expiry_and_published(redis_live, subscribe):
@@ -80,9 +77,6 @@ def test_task_final_is_published_on_the_owners_channel(redis_live, subscribe):
     assert next_message() == TaskFinal(id=task_id, status="cancelled")
 
 
-# --- Cancellation -------------------------------------------------------------------------------------------
-
-
 def test_cancel_flag_is_set_and_expires(redis_live):
     task_id = uuid4()
     assert not live.cancel_requested(task_id)
@@ -108,9 +102,6 @@ def test_clear_task_keys_removes_progress_and_flag(redis_live):
     assert live.cancel_requested(other)
 
 
-# --- Worker heartbeats --------------------------------------------------------------------------------------
-
-
 def test_worker_heartbeat_disappears_after_its_expiry(redis_live):
     host = f"nodeB-worker-{uuid4().hex[:6]}"
     beat = live.start_heartbeat(host, "loading", interval=60, ttl=1)
@@ -127,7 +118,7 @@ def test_heartbeat_thread_keeps_rewriting(redis_live):
     host = f"nodeB-worker-{uuid4().hex[:6]}"
     beat = live.start_heartbeat(host, "idle", interval=0.2, ttl=1)
     try:
-        time.sleep(1.5)  # past the expiry, so only the thread can have kept it alive
+        time.sleep(1.5)
         assert [hb.host for hb in live.worker_heartbeats()] == [host]
     finally:
         beat.stop()
@@ -159,7 +150,7 @@ def test_any_worker_idle_for_uses_since(redis_live):
     assert not live.any_worker_idle_for(60)
 
     long_ago = time.time() - 120
-    redis_live.hset(live.worker_key(busy), "since", long_ago)  # busy for long doesn't count
+    redis_live.hset(live.worker_key(busy), "since", long_ago)
     assert not live.any_worker_idle_for(60)
     redis_live.hset(live.worker_key(idle), "since", long_ago)
     assert live.any_worker_idle_for(60)
@@ -188,7 +179,6 @@ def test_started_stays_through_state_changes_and_moves_on_a_restart(redis_live):
         assert live.worker_heartbeats()[0].started == started
     finally:
         beat.stop(timeout=1)
-    # Swarm runs the replacement under the same name, before the old heartbeat has expired.
     beat = live.start_heartbeat(host, "loading", interval=60)
     try:
         (hb,) = live.worker_heartbeats()
@@ -204,9 +194,6 @@ def test_host_without_worker_suffix_runs_on_machine_name(redis_live, monkeypatch
     assert live.worker_heartbeats()[0].machine == "laptop"
 
 
-# --- API and machine heartbeats -----------------------------------------------------------------------------
-
-
 def test_api_and_machine_heartbeats_round_trip(redis_live):
     live.write_api_heartbeat("nodeA", 4242, sockets=3, requests_per_min=17)
     live.write_machine_heartbeat("nodeA", "manager")
@@ -217,9 +204,6 @@ def test_api_and_machine_heartbeats_round_trip(redis_live):
     assert (machine.machine, machine.role) == ("nodeA", "manager")
     assert redis_live.ttl(live.api_key("nodeA", 4242)) > 0
     assert redis_live.ttl(live.machine_key("nodeA")) > 0
-
-
-# --- Controller state ---------------------------------------------------------------------------------------
 
 
 def test_autoscaler_state_round_trips(redis_live):
@@ -288,7 +272,6 @@ def test_the_same_alert_reaches_the_webhook_once_in_thirty_minutes(webhook, redi
 
 
 def test_an_unreachable_webhook_neither_blocks_nor_raises(redis_live, monkeypatch, caplog):
-    # A blackholed address: connecting would hang until the timeout.
     monkeypatch.setenv("ALERT_WEBHOOK_URL", "http://10.255.255.1:9/hook")
     monkeypatch.setenv("ALERT_WEBHOOK_TIMEOUT_S", "0.5")
     get_settings.cache_clear()

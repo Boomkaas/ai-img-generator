@@ -13,7 +13,7 @@ from controller.scalers import NullScaler, ScalerError, SwarmScaler
 
 pytestmark = pytest.mark.unit
 
-NOW = 1_800_000_000.0  # 08:00 UTC
+NOW = 1_800_000_000.0
 STARTUP_TIMEOUT_S = 600
 COOLDOWN_S = 120
 SCALE_DOWN_IDLE_S = 300
@@ -36,7 +36,7 @@ class FakeScaler:
 
 class FakeLive:
     def __init__(self):
-        self.workers = []  # one state per worker heartbeat
+        self.workers = []
         self.idle_for = 0.0
         self.saved = {}
         self.alerts = []
@@ -67,7 +67,6 @@ class FakeDb:
 
 @pytest.fixture(autouse=True)
 def settings(monkeypatch):
-    # The defaults, whatever a local .env says, and a fixed time zone for last_action.
     for name, value in {
         "SCALER": "none",
         "MIN_WORKERS": str(MIN_WORKERS),
@@ -142,7 +141,6 @@ def test_gives_up_on_a_worker_that_cannot_be_placed(fake):
 
 
 def test_waits_the_full_startup_timeout_from_when_a_worker_was_first_seen_loading(fake):
-    # The last change was long ago; a worker that restarts now still gets the whole timeout.
     fake.setup(replicas=2, ready=1, loading=1)
     fake.tick(NOW)
     fake.tick(NOW + STARTUP_TIMEOUT_S)
@@ -168,7 +166,6 @@ def test_without_swarm_a_worker_that_never_appears_is_not_given_up_on(fake):
 
 
 def test_a_draining_worker_does_not_count_against_scaling_up(fake):
-    # Scaled down from 3 to 2; the stopped worker is still finishing its job.
     fake.setup(replicas=2, ready=3, queued=5)
     fake.tick()
     assert fake.scaler.calls == [3]
@@ -268,9 +265,6 @@ def test_scaler_is_created_from_settings_on_the_first_tick(fake):
     assert fake.state.scaler.replicas() == MIN_WORKERS
 
 
-# --- Scalers ---
-
-
 def test_null_scaler_keeps_the_count():
     scaler = NullScaler(1)
     scaler.set_replicas(3)
@@ -300,7 +294,7 @@ def test_swarm_scaler_changes_only_the_replica_count():
     service = MagicMock(id="svc", version=41, attrs={"Spec": spec})
     scaler, client = swarm_with(service)
     scaler.set_replicas(2)
-    service.scale.assert_not_called()  # it would send Docker's defaults and restart every worker
+    service.scale.assert_not_called()
     client.api.update_service.assert_called_once_with(
         "svc",
         41,

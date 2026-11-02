@@ -42,7 +42,7 @@ def test_heartbeat_thread_survives_an_unexpected_error(monkeypatch, host):
 
     monkeypatch.setattr(live, "_machine_figures", figures_failing_twice)
     monkeypatch.setattr(live, "_write_hash", lambda key, mapping, ttl: written.append(mapping["state"]))
-    beat = live.start_heartbeat(host, "idle", interval=0.02)  # the first write fails, on the caller's thread
+    beat = live.start_heartbeat(host, "idle", interval=0.02)
     try:
         assert wait_until(lambda: written)
         assert beat.is_alive()
@@ -55,7 +55,7 @@ def test_a_slow_beat_never_lands_after_a_newer_state(monkeypatch, host):
     written, slow_write_started = [], threading.Event()
 
     def write_hash(key, mapping, ttl):
-        if mapping["state"] == "busy":  # the beat that read the old state is slow to reach Redis
+        if mapping["state"] == "busy":
             slow_write_started.set()
             time.sleep(0.3)
         written.append(mapping["state"])
@@ -89,6 +89,6 @@ async def test_async_client_bounds_only_connecting():
     try:
         kwargs = client.connection_pool.connection_kwargs
         assert kwargs["socket_connect_timeout"] == get_settings().REDIS_CONNECT_TIMEOUT_S
-        assert kwargs.get("socket_timeout") is None  # a subscription may idle for minutes
+        assert kwargs.get("socket_timeout") is None
     finally:
         await client.aclose()

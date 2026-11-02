@@ -1,15 +1,4 @@
 #!/bin/sh
-# Run on machine A, where the backup service keeps its dumps: restores the newest one into a scratch Postgres
-# container and checks that
-#   - the dump is recent (written within MAX_AGE_H hours, default 26),
-#   - it restores without an error,
-#   - the users and tasks tables came back, with at least one user,
-#   - it holds no more users than the running database (users are never deleted).
-# Prints PASS or FAIL per check and the restored row counts; exits 1 if anything failed. The running
-# database is only read from, and the scratch container is removed afterwards.
-#
-#   scripts/restore_check.sh                  (the newest dump in the stack's backups volume)
-#   scripts/restore_check.sh <file.dump>      (any pg_dump -Fc file)
 set -eu
 
 stack=${STACK:-imagegen}
@@ -20,7 +9,7 @@ failures=0
 
 command -v docker > /dev/null || { echo "docker is required" >&2; exit 2; }
 
-check() {  # check <ok: 0 or 1> <message>
+check() {
     if [ "$1" -eq 0 ]; then echo "PASS $2"; else echo "FAIL $2"; failures=$((failures + 1)); fi
 }
 
@@ -43,7 +32,6 @@ docker run -d --name "$scratch" -e POSTGRES_PASSWORD=scratch -e POSTGRES_DB=rest
     -v "$source:/backups:ro" "$image" > /dev/null
 scratch_sql() { docker exec "$scratch" psql -U postgres -d restore_check -tA -c "$1"; }
 
-# Over TCP: while the image initialises, its temporary server listens only on the socket.
 tries=0
 until docker exec "$scratch" pg_isready -q -h 127.0.0.1 -U postgres; do
     tries=$((tries + 1))

@@ -53,7 +53,7 @@ def register(body: Credentials, response: Response) -> PublicUser:
         raise HTTPException(422, f"Choose a password of at least {settings.MIN_PASSWORD_LEN} characters")
     try:
         user = db.create_user(email, security.hash_password(body.password))
-    except IntegrityError:  # users_email_unique, case-insensitive; also settles two racing registrations
+    except IntegrityError:
         raise HTTPException(409, "An account with this email already exists") from None
     return _sign_in(response, user)
 
@@ -61,7 +61,6 @@ def register(body: Credentials, response: Response) -> PublicUser:
 @router.post("/login", response_model=PublicUser)
 def login(body: Credentials, response: Response) -> PublicUser:
     user = db.get_user_by_email(security.normalise_email(body.email))
-    # The same message, and the same argon2 work, for an unknown email and a wrong password.
     if not security.verify_password(user.password_hash if user else None, body.password):
         raise HTTPException(401, "Email or password is incorrect")
     if security.needs_rehash(user.password_hash):
@@ -77,8 +76,6 @@ def refresh(response: Response, refresh_token: RefreshCookie = None) -> PublicUs
     row = db.get_refresh_token(token_hash)
     if row is None or row.expires_at <= datetime.now(UTC):
         raise HTTPException(401, SIGN_IN_AGAIN)
-    # Revoking is the guard: of two requests with the same token, exactly one gets True. A token that was
-    # already used or revoked means someone else holds a copy, so every session of that user ends.
     if row.revoked_at is not None or not db.revoke_refresh_token(token_hash):
         revoked = db.revoke_all_refresh_tokens(row.user_id)
         log.warning("refresh token reused for user %s; revoked %d tokens", row.user_id, revoked)

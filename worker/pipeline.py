@@ -21,7 +21,7 @@ def load_pipeline():
 
     torch.set_num_threads(settings.WORKER_THREADS)
     pipe = StableDiffusionPipeline.from_pretrained(settings.MODEL_DIR, torch_dtype=torch.float32).to("cpu")
-    pipe.enable_attention_slicing()  # caps peak RAM at 768 px
+    pipe.enable_attention_slicing()
     pipe.set_progress_bar_config(disable=True)
     return pipe
 

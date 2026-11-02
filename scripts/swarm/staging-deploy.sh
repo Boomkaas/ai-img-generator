@@ -1,15 +1,4 @@
 #!/bin/sh
-# Run on the staging manager by the staging workflow, which copies it there first, so checking out another
-# commit below can't change the script while it runs:
-#
-#   sh staging-deploy.sh <repository dir> <commit> <tag> [url]
-#
-# Checks out <commit> in the repository clone, deploys the images tagged <tag> with the one-machine override,
-# waits until every service runs them, and runs scripts/smoke.py against <url> (default https://localhost).
-# If any of that fails, it deploys the commit and tag that ran before, and exits 1.
-#
-# The clone needs infra/.env.prod with REGISTRY pointing at the registry the workflow pushes to, and the
-# machine must be able to pull from it (docker login).
 set -eu
 
 if [ $# -lt 3 ]; then
@@ -30,7 +19,7 @@ running_tag() {
         | sed 's/@.*//; s/.*://'
 }
 
-wait_for() {  # until the migrations of <tag> ran and each service runs <tag> and nothing else
+wait_for() {
     started=$(date +%s)
     while [ $(($(date +%s) - started)) -le "$start_within" ]; do
         settled=yes
@@ -41,7 +30,6 @@ wait_for() {  # until the migrations of <tag> ran and each service runs <tag> an
             other=$(echo "$states" | grep -cvE ":$1(-fake)?(@[^ ]*)? Running" || true)
             if [ "$fresh" -eq 0 ] || [ "$other" -gt 0 ]; then settled=no; fi
         done
-        # The API answers /api/health before the tables exist; the one-off migrate service creates them.
         migrated=$(docker service ps "${stack}_migrate" --format '{{.Image}} {{.CurrentState}}' \
             | grep -cE ":$1(@[^ ]*)? Complete" || true)
         [ "$migrated" -gt 0 ] || settled=no
@@ -53,7 +41,7 @@ wait_for() {  # until the migrations of <tag> ran and each service runs <tag> an
     return 1
 }
 
-deploy() {  # deploy <commit> <tag>
+deploy() {
     echo "--- deploying $2 ($1)"
     git fetch --quiet origin \
         && git checkout --quiet --detach "$1" \
@@ -69,7 +57,6 @@ fi
 
 echo "--- $tag failed on staging" >&2
 if [ -n "$previous" ] && [ "$previous" != "$tag" ]; then
-    # The tag is sha-<commit>, so the stack files come from the same commit as the images.
     deploy "${previous#sha-}" "$previous" && echo "rolled back to $previous" >&2 \
         || echo "the rollback to $previous failed too" >&2
 else

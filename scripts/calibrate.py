@@ -22,7 +22,7 @@ import psutil
 from common.config import Settings, get_settings
 
 PROMPT = "a lighthouse on a rocky coast at sunset, oil painting"
-UNIT_SIZE = 512  # the size of one cost unit
+UNIT_SIZE = 512
 GB = 1024**3
 DERIVED = (
     "TASK_SOFT_TIME_LIMIT",
@@ -36,9 +36,9 @@ DERIVED = (
 @dataclass(frozen=True)
 class Measurement:
     load_s: float
-    unit_s: float  # one 512 px job
+    unit_s: float
     max_size: int
-    max_s: float  # one job at max_size
+    max_s: float
     peak_bytes: int
     ram_bytes: int
     cores: int
@@ -46,7 +46,7 @@ class Measurement:
 
 @dataclass(frozen=True)
 class Recommendation:
-    timeouts: Settings  # MEASURED_MAX_RUNTIME_S, CALIBRATED_SECONDS_PER_COST_UNIT and the derived chain
+    timeouts: Settings
     stop_grace_period: str
     reservation_gb: int
     limit_gb: int
@@ -141,14 +141,13 @@ def measure(settings: Settings) -> Measurement:
         unit_s=unit_s,
         max_size=max_size,
         max_s=max_s,
-        peak_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024,  # Linux reports KiB
+        peak_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024,
         ram_bytes=psutil.virtual_memory().total,
         cores=psutil.cpu_count(logical=True),
     )
 
 
 def main() -> int:
-    # Settings refuse to load without a signing key, and nothing is signed here.
     os.environ.setdefault("JWT_SECRET", secrets.token_hex(32))
     settings = get_settings()
     if settings.PIPELINE != "real":

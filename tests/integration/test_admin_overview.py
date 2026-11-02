@@ -10,7 +10,7 @@ pytestmark = pytest.mark.integration
 def test_overview_matches_the_database_and_heartbeats(stack, clients):
     admin = clients[0]
     db.set_role(db.get_user_by_email(admin.email).id, "admin")
-    ids = [c.submit("a cat", size=256) for c in clients[1:4]]  # two run, one waits
+    ids = [c.submit("a cat", size=256) for c in clients[1:4]]
     stack.wait_all(ids[:2], "running")
     stack.wait_progress(ids[1], at_least=4)
 

@@ -20,17 +20,17 @@ log = logging.getLogger(__name__)
 @dataclass
 class ControllerState:
     redis_run_id: str | None = None
-    scaler: Scaler | None = None  # created on the first tick, so a Docker error is logged like any other
+    scaler: Scaler | None = None
     last_scale_at: float = 0.0
-    starting_since: float | None = None  # when the autoscaler first saw a launched worker not yet ready
+    starting_since: float | None = None
     last_cleanup: float = 0.0
-    redis_changed_at: float = 0.0  # when the sweeper last saw a new Redis run id
-    force_stopped: set[str] = field(default_factory=set)  # tasks whose worker was already killed
-    alert_since: dict[str, float] = field(default_factory=dict)  # when each alert's condition began to hold
-    alerts_raised: set[str] = field(default_factory=set)  # alerts already sent for the current episode
-    workers_seen: dict[str, float] | None = None  # each worker's start time on the previous tick
-    worker_starts: dict[str, list[float]] = field(default_factory=dict)  # per machine, within the window
-    workers_launched: int = 0  # started by the autoscaler and not yet seen, so not counted as restarts
+    redis_changed_at: float = 0.0
+    force_stopped: set[str] = field(default_factory=set)
+    alert_since: dict[str, float] = field(default_factory=dict)
+    alerts_raised: set[str] = field(default_factory=set)
+    workers_seen: dict[str, float] | None = None
+    worker_starts: dict[str, list[float]] = field(default_factory=dict)
+    workers_launched: int = 0
 
 
 def tick(now: float, state: ControllerState) -> None:

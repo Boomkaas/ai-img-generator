@@ -11,16 +11,12 @@ from common.estimate import cost, simulate_wait
 pytestmark = pytest.mark.unit
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
-SPU = (
-    480  # seconds per cost unit in these tests, passed explicitly so a calibrated value in .env can't leak in
-)
+SPU = 480
 
-# Cost relative to a 512 px job, rounded to two places.
 COST_TABLE = {256: 0.25, 384: 0.56, 512: 1.0, 640: 1.56, 768: 2.25}
 
 
 def test_wait_example():
-    # One worker halfway through a 512 px job, one idle; a 512 px and a 768 px job waiting.
     assert simulate_wait([0.5], [1.0, 2.25], 2, 480) == 480
 
 
@@ -30,29 +26,23 @@ def test_no_workers_is_treated_as_one():
 
 def test_empty_queue_returns_the_earliest_free_worker():
     assert simulate_wait([0.5, 0.25], [], 2, 480) == 120
-    assert simulate_wait([0.5], [], 2, 480) == 0  # one worker is idle
+    assert simulate_wait([0.5], [], 2, 480) == 0
 
 
 def test_more_running_tasks_than_workers_counts_the_oldest():
-    # A third task is running on a worker whose heartbeat is gone; only the first two count.
     assert simulate_wait([1.0, 0.5, 0.1], [], 2, 480) == 240
     assert simulate_wait([1.0, 0.5, 0.1], [0.25], 2, 480) == 360
 
 
 def test_queue_is_served_oldest_first_on_the_earliest_free_worker():
-    # One worker: everything runs one after another.
     assert simulate_wait([0.5], [1.0, 2.25], 1, 100) == pytest.approx(50 + 100 + 225)
 
 
 def test_cost_matches_the_table_for_every_allowed_size():
-    # The code's default sizes, not whatever the local .env overrides them with.
     assert set(Settings.model_fields["ALLOWED_SIZES"].default) == set(COST_TABLE)
     for size, expected in COST_TABLE.items():
         assert cost(size) == pytest.approx(expected, abs=0.005)
     assert cost(768) / cost(256) == 9
-
-
-# --- The parts that read Postgres and Redis, with both faked ------------------------------------------------
 
 
 def task(size, status, created=0, started=None, finished=None, progress=0):
@@ -92,7 +82,6 @@ def test_seconds_per_unit_falls_back_to_the_calibrated_value(fake_state):
 
 
 def test_seconds_per_unit_is_the_median_per_cost_unit(fake_state):
-    # Run times per cost unit: 100, 100, 200, 400, 1000 -> median 200.
     fake_state(
         done=[
             task(512, "done", started=0, finished=100),
@@ -106,7 +95,6 @@ def test_seconds_per_unit_is_the_median_per_cost_unit(fake_state):
 
 
 def test_wait_estimate_simulates_two_workers(fake_state):
-    # The same example, with the services faked.
     fake_state(
         workers=2,
         running=[task(512, "running", progress=50)],
@@ -137,7 +125,6 @@ def test_ready_in_seconds_for_each_status(fake_state):
     first, second = task(512, "queued", created=1), task(768, "queued", created=2)
     running = task(512, "running", progress=50)
     fake_state(workers=1, running=[running], queued=[first, second])
-    # The running job frees the worker at 240 s; the first queued job then runs for 480 s.
     assert estimate.ready_in_seconds(first, spu=SPU) == 240 + 480
     assert estimate.ready_in_seconds(second, spu=SPU) == 240 + 480 + 1080
     assert estimate.ready_in_seconds(running, spu=SPU) == 240
