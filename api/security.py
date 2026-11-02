@@ -22,17 +22,13 @@ from common.config import get_settings
 ACCESS_COOKIE = "access_token"
 REFRESH_COOKIE = "refresh_token"
 ACCESS_COOKIE_PATH = "/"
-REFRESH_COOKIE_PATH = "/api/auth"  # both refresh and logout receive it
+REFRESH_COOKIE_PATH = "/api/auth"
 JWT_ALGORITHM = "HS256"
 
-# "Looks valid": one @, something on both sides, a dot in the domain, no spaces. Delivery isn't checked.
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 _hasher = PasswordHasher()
-# Checked when the email is unknown, so a sign-in takes as long whether or not the account exists.
 _DUMMY_HASH = _hasher.hash(secrets.token_urlsafe(16))
-
-# --- Email --------------------------------------------------------------------------------------------------
 
 
 def normalise_email(email: str) -> str:
@@ -41,9 +37,6 @@ def normalise_email(email: str) -> str:
 
 def email_looks_valid(email: str) -> bool:
     return len(email) <= get_settings().MAX_EMAIL_LEN and EMAIL_PATTERN.match(email) is not None
-
-
-# --- Passwords ----------------------------------------------------------------------------------------------
 
 
 _hash_slots_lock = threading.Lock()
@@ -83,9 +76,6 @@ def needs_rehash(password_hash: str) -> bool:
     return _hasher.check_needs_rehash(password_hash)
 
 
-# --- Access token -------------------------------------------------------------------------------------------
-
-
 def create_access_token(user_id, role: str) -> str:
     settings = get_settings()
     now = int(time.time())
@@ -103,9 +93,6 @@ def decode_access_token(token: str) -> dict:
     )
 
 
-# --- Refresh token ------------------------------------------------------------------------------------------
-
-
 def new_refresh_token() -> tuple[str, str, datetime]:
     """A fresh token, the hash to store, and when it expires."""
     token = secrets.token_urlsafe(32)
@@ -115,9 +102,6 @@ def new_refresh_token() -> tuple[str, str, datetime]:
 
 def hash_refresh_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
-
-
-# --- Cookies ------------------------------------------------------------------------------------------------
 
 
 def _cookie_flags() -> dict:

@@ -44,7 +44,6 @@ def submit(
         return full.response()
 
 
-# Declared before /tasks/{task_id}, which would otherwise take "active" for an id.
 @router.get("/tasks/active", response_model=TaskOut | None)
 def active_task(user: CurrentUser) -> TaskOut | None:
     task = db.get_active_task(user.id)
@@ -70,7 +69,7 @@ def get_task(task_id: uuid.UUID, user: CurrentUser) -> TaskOut:
 
 @router.get("/tasks/{task_id}/image", response_class=StreamingResponse)
 def task_image(task_id: uuid.UUID, user: CurrentUser) -> StreamingResponse:
-    task = db.get_task(task_id, user_id=user.id)  # another user's task looks like a missing one
+    task = db.get_task(task_id, user_id=user.id)
     if task is None or task.status != db.DONE or not task.result_key:
         raise HTTPException(404, NO_IMAGE)
     try:
@@ -83,7 +82,7 @@ def task_image(task_id: uuid.UUID, user: CurrentUser) -> StreamingResponse:
         stream,
         media_type="image/png",
         headers={"Cache-Control": f"private, max-age={get_settings().IMAGE_CACHE_MAX_AGE_S}"},
-        background=BackgroundTask(stream.close),  # also when the client leaves before the last chunk
+        background=BackgroundTask(stream.close),
     )
 
 

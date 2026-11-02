@@ -31,8 +31,6 @@ def fail_orphans(now: float, state: ControllerState) -> None:
     The finish guard makes this safe even when the worker is just finishing.
     """
     settings = get_settings()
-    # A Redis that restarted without its data has no heartbeats until each worker's next beat, and every
-    # running task would look lost; wait until they have had time to come back.
     if live.redis_run_id() != state.redis_run_id or now - state.redis_changed_at < settings.HEARTBEAT_TTL_S:
         return
     working_on = {hb.task_id for hb in live.worker_heartbeats() if hb.task_id}
@@ -51,7 +49,7 @@ def force_stop_cancelled(now: float, state: ControllerState) -> None:
     Celery's pool starts a fresh process in its place, which loads the model again.
     """
     busy = {hb.task_id for hb in live.worker_heartbeats() if hb.state == "busy" and hb.task_id}
-    state.force_stopped &= busy  # once no worker has it, nothing more can be stopped
+    state.force_stopped &= busy
     after = get_settings().FORCE_STOP_AFTER_S
     for task_id in busy - state.force_stopped:
         try:
@@ -94,7 +92,6 @@ def trim_history(now: float, state: ControllerState) -> None:
             try:
                 storage.delete(task.result_key)
             except Exception:
-                # Keep the row, so the next cleanup tries the image again instead of losing track of it.
                 log.warning("could not delete the image of task %s", task.id, exc_info=True)
                 continue
         db.delete_task(task.id)

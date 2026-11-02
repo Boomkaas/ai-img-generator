@@ -1,11 +1,5 @@
 name: Staging
 
-# Every push to develop builds the images, deploys them to the staging swarm with the one-machine override,
-# and runs scripts/smoke.py there. A failed smoke test puts back what ran before and fails the run. Nothing
-# happens until the secrets STAGING_HOST ([user@]host of the staging manager) and STAGING_SSH_KEY exist;
-# STAGING_KNOWN_HOSTS (that machine's ssh-keyscan line) is optional but recommended. The repository variables
-# STAGING_DIR (the clone on that machine, default imagegen) and STAGING_URL (default https://localhost, as
-# seen from that machine) change the defaults.
 on:
   push:
     branches: [develop]
@@ -44,7 +38,6 @@ jobs:
       matrix:
         include:
           - {name: api, dockerfile: infra/docker/api.Dockerfile}
-          # The one-machine override runs the fake worker, tagged <tag>-fake.
           - {name: worker, dockerfile: infra/docker/worker.Dockerfile, target: fake, suffix: -fake}
           - {name: controller, dockerfile: infra/docker/controller.Dockerfile}
           - {name: nginx, dockerfile: infra/docker/nginx.Dockerfile}

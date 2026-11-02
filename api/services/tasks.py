@@ -46,8 +46,6 @@ def submit(user: Row, body: SubmitBody, idempotency_key: uuid.UUID) -> TaskOut:
     except ValidationProblem as problem:
         raise HTTPException(422, problem.message) from None
     task, created = _reserve(user.id, prompt, body.size, idempotency_key)
-    # A retry may come from a client whose first request died between the commit and the enqueue, so a
-    # task that is still queued is sent again. The worker's claim drops whichever copy arrives second.
     if created or task.status == db.QUEUED:
         _enqueue(task)
     return task_out(task)
@@ -56,22 +54,18 @@ def submit(user: Row, body: SubmitBody, idempotency_key: uuid.UUID) -> TaskOut:
 def _reserve(user_id, prompt: str, size: int, idempotency_key: uuid.UUID) -> tuple[Row, bool]:
     settings = get_settings()
     with db.transaction() as tx:
-        # Serialises every submit in the system for a few milliseconds, so two clicks that land on
-        # different API servers can't both slip past the caps.
         db.advisory_lock(tx)
         existing = db.find_by_idempotency_key(tx, user_id, idempotency_key)
         if existing is not None:
-            return existing, False  # a retried request: the same task, no second row
+            return existing, False
         if db.count_active_for_user(tx, user_id) >= settings.MAX_ACTIVE_TASKS_PER_USER:
             raise HTTPException(429, "You already have an image in progress")
         if db.count_queued(tx) < settings.MAX_QUEUED_TOTAL:
             return db.insert_task(tx, user_id, prompt, size, idempotency_key), True
-    # Estimated after the lock is released: it reads every active task and the workers' heartbeats.
     raise QueueFull(max(1, math.ceil(estimate.estimate_wait_seconds())))
 
 
 def _enqueue(task: Row) -> None:
-    # Only after the commit, so the worker's claim always finds the row.
     try:
         celery_client.send_generate(task)
     except Exception:
@@ -86,10 +80,8 @@ def cancel(task_id: uuid.UUID, owner_id) -> CancelOut:
     if user_id is None:
         task = db.get_task(task_id, user_id=owner_id)
         if task is None:
-            raise HTTPException(404, NO_SUCH_TASK)  # another user's task looks like a missing one
-        return CancelOut(status=task.status)  # already finished: nothing to do
-    # The row is already cancelled, and the worker's claim and finish guards respect that on their own.
-    # The flag and the revoke only make a worker stop sooner, so a Redis outage mustn't fail the request.
+            raise HTTPException(404, NO_SUCH_TASK)
+        return CancelOut(status=task.status)
     try:
         live.request_cancel(task_id, ttl=get_settings().CANCEL_FLAG_TTL_S)
         celery_client.revoke(task_id)
@@ -131,7 +123,6 @@ def system_status() -> SystemStatus:
 def history(user_id, before: datetime | None, limit: int | None) -> TaskPage:
     settings = get_settings()
     limit = min(limit or settings.HISTORY_PAGE_SIZE, settings.HISTORY_PAGE_MAX)
-    # One row more than the page tells whether another page follows, so the last page has no cursor.
     rows = db.history_page(user_id, before=before, limit=limit + 1)
     page = rows[:limit]
     next_before = page[-1].created_at if len(rows) > limit else None

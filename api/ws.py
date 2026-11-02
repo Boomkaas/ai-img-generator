@@ -20,9 +20,9 @@ log = logging.getLogger(__name__)
 
 router = APIRouter()
 
-UNAUTHORISED = 4401  # the browser refreshes its access token and reconnects
+UNAUTHORISED = 4401
 FORBIDDEN_ORIGIN = 4403
-TOO_MANY_SOCKETS = 1008  # policy violation
+TOO_MANY_SOCKETS = 1008
 INTERNAL_ERROR = 1011
 
 PING = Ping().model_dump_json()
@@ -38,7 +38,6 @@ class SystemStatusCache:
         self._at = 0.0
 
     def get(self) -> SystemStatus:
-        # Held while computing, so sockets arriving together wait for one estimate instead of each running it.
         with self._lock:
             if self._status is None or time.monotonic() - self._at >= self._ttl:
                 self._status = service.system_status()
@@ -53,8 +52,6 @@ def snapshot(status: SystemStatusCache, user_id) -> Snapshot:
 
 @router.websocket("/ws")
 async def updates(websocket: WebSocket) -> None:
-    # Refusing the handshake would reach the browser as a bare HTTP 403, which it can't tell from a network
-    # error; a close code after accepting says what to do.
     await websocket.accept()
     if not deps.check_origin(websocket.headers.get("origin")):
         await websocket.close(FORBIDDEN_ORIGIN)
@@ -71,7 +68,6 @@ async def updates(websocket: WebSocket) -> None:
 
     hub: Hub = websocket.app.state.hub
     connection = Connection(websocket, str(user.id), user.role == "admin")
-    # Registered before the snapshot is read, so nothing published meanwhile is lost; it waits in the outbox.
     if not hub.add(connection):
         await websocket.close(TOO_MANY_SOCKETS)
         return
@@ -86,7 +82,7 @@ async def updates(websocket: WebSocket) -> None:
         try:
             await websocket.send_text(current.model_dump_json())
         except Exception:
-            return  # the client left while the snapshot was being read
+            return
         await _serve(connection)
     finally:
         hub.remove(connection)
@@ -110,13 +106,11 @@ async def _serve(connection: Connection) -> None:
 
 
 async def _close(websocket: WebSocket, code: int = 1000) -> None:
-    # Already closed if the client left; a socket that stopped reading may not answer at all.
     with contextlib.suppress(Exception), anyio.move_on_after(get_settings().WS_SEND_TIMEOUT_S):
         await websocket.close(code)
 
 
 async def _read_until_closed(websocket: WebSocket) -> None:
-    # The client has nothing to say; reading only notices when it leaves.
     while (await websocket.receive())["type"] != "websocket.disconnect":
         pass
 

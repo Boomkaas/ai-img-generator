@@ -69,7 +69,6 @@ def worker(migrated_db, redis_live, bucket, redis_url, monkeypatch, tmp_path):
                 proc.kill()
                 proc.wait()
             celery_client.reset_app()
-            # pytest shows captured teardown output only for a test that failed.
             print(log_path.read_text())
 
 

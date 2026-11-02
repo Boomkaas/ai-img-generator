@@ -1,9 +1,5 @@
 name: Release
 
-# A version tag (v1.2.3) builds the four images, pushes them to GitHub Container Registry as
-# ghcr.io/<owner>/imagegen-<name>:1.2.3, and publishes a GitHub Release with the changelog since the previous
-# tag. A pull request that changes the release, a Dockerfile or the pinned packages runs the same builds as a
-# dry run: nothing is pushed or released.
 on:
   push:
     tags: ["v*.*.*"]
@@ -14,7 +10,6 @@ on:
       - infra/docker/**
   workflow_dispatch:
 
-# A newer push to the same pull request replaces a dry run in progress; a tag's run always finishes.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -44,14 +39,12 @@ jobs:
       - name: Name and version
         id: meta
         run: |
-          # Image names must be lower case; the owner may not be.
           echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/imagegen-${{ matrix.name }}" >> "$GITHUB_OUTPUT"
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           else
             echo "version=dry-run-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
           fi
-      # torch and the model weights need more room than a runner has free.
       - name: Free disk space
         if: matrix.name == 'worker'
         run: |
@@ -71,12 +64,10 @@ jobs:
           target: ${{ matrix.target }}
           push: ${{ env.PUBLISH == 'true' }}
           tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
-          # Links the package to this repository, so it shows there and inherits its access.
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.meta.outputs.version }}
           cache-from: type=gha,scope=release-${{ matrix.name }}
-          # The worker's layers are several GB, more than is worth keeping in the Actions cache.
           cache-to: ${{ matrix.name != 'worker' && format('type=gha,scope=release-{0},mode=max', matrix.name) || '' }}
 
   release:
@@ -85,7 +76,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # the changelog reads the history back to the previous tag
+          fetch-depth: 0
       - name: Changelog
         uses: orhun/git-cliff-action@v4
         with:

@@ -80,7 +80,6 @@ export function History({ onClose }: { onClose: () => void }) {
       if (event.key === "Escape") onClose();
       if (event.key === "Tab") keepFocusInside(event);
     };
-    // The page behind stays in the tab order, so Tab wraps around the drawer's own controls instead.
     const keepFocusInside = (event: KeyboardEvent) => {
       const controls = drawer.current?.querySelectorAll<HTMLElement>("button:not(:disabled), a[href]");
       const first = controls?.[0];

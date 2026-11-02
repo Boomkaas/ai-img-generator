@@ -43,7 +43,6 @@ def admin_overview() -> AdminOverview:
                 )
             )
         except ValidationError:
-            # One bad heartbeat mustn't freeze the whole admin panel.
             log.warning("skipping the malformed heartbeat of %s", hb.host, exc_info=True)
 
     return AdminOverview(
@@ -56,8 +55,6 @@ def admin_overview() -> AdminOverview:
 
 def _machines(workers: list[live.WorkerHeartbeat]) -> list[MachineItem]:
     apis = live.api_heartbeats()
-    # Every heartbeat on a machine carries the same whole-machine figures, at most one interval apart, so the
-    # controller's own beat is taken first, then an API server's, then a worker's.
     figures: dict[str, tuple[float, float]] = {}
     roles: dict[str, str] = {}
     for hb in workers:
@@ -126,7 +123,6 @@ def _autoscaler(workers: list[live.WorkerHeartbeat]) -> AutoscalerItem:
         value = state.get(name)
         return default if value is None else value
 
-    # Until the autoscaler has reported, the heartbeats are the best account of the workers.
     ready = sum(hb.state in ("idle", "busy") for hb in workers)
     return AutoscalerItem(
         desired=stored("desired", ready),

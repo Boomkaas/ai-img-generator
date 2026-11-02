@@ -1,4 +1,3 @@
-# The images take only what they copy explicitly; everything else stays out of the build context.
 *
 !pyproject.toml
 !alembic.ini

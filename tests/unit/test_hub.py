@@ -59,7 +59,7 @@ async def test_a_stuck_socket_delays_no_one_and_is_dropped():
         await asyncio.sleep(0.01)
 
     assert fine.websocket.sent == ["0", "1", "2", "3", "4"]
-    assert hub.sockets == 1  # the stuck one fell a full outbox behind
+    assert hub.sockets == 1
     with pytest.raises(TimeoutError):
         await writers[0]
     writers[1].cancel()

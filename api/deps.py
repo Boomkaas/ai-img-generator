@@ -21,7 +21,7 @@ def user_from_token(access_token: str | None) -> Row | None:
     try:
         claims = security.decode_access_token(access_token)
         return db.get_user(claims["sub"])
-    except (jwt.PyJWTError, ValueError):  # ValueError: a validly signed sub that isn't a UUID
+    except (jwt.PyJWTError, ValueError):
         return None
 
 

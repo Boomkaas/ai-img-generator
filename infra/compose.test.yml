@@ -1,8 +1,3 @@
-# The whole system on one machine for the integration, load-balancer and end-to-end tests:
-#   make test-integration / test-lb / test-e2e
-# The tests start it as project imagegen-test and remove it afterwards. Two API servers sit behind Nginx, and
-# two workers run the fake pipeline. Timeouts are shortened so a lost worker or a stuck cancel shows within
-# seconds, and sized for 25-second fake jobs.
 name: imagegen-test
 
 x-app-env: &app_env
@@ -14,12 +9,11 @@ x-app-env: &app_env
   S3_SECRET_KEY: imagegen-test-secret
   S3_BUCKET: imagegen
   JWT_SECRET: test-only-jwt-secret-0123456789abcdef
-  # The tests also call the API servers directly over plain HTTP, where a Secure cookie is never sent.
   COOKIE_SECURE: "false"
   ALLOWED_ORIGINS: https://localhost:8443
   MEASURED_MAX_RUNTIME_S: "30"
   CALIBRATED_SECONDS_PER_COST_UNIT: "25"
-  WORKER_STOP_GRACE_S: "120"              # the worker's stop_grace_period
+  WORKER_STOP_GRACE_S: "120"
   HEARTBEAT_INTERVAL_S: "1"
   HEARTBEAT_TTL_S: "5"
   CONTROLLER_TICK_S: "2"
@@ -57,8 +51,6 @@ services:
       timeout: 3s
       retries: 30
 
-  # The data lives in the image's anonymous volume, which a restart keeps and a recreate with
-  # --renew-anon-volumes throws away.
   redis:
     image: redis:7
     command: ["redis-server", "--appendonly", "yes"]
@@ -93,7 +85,6 @@ services:
       postgres: {condition: service_healthy}
       minio: {condition: service_healthy}
 
-  # A self-signed certificate for Nginx, in the file names the stack's Swarm secrets have.
   certs:
     image: imagegen-test-api
     pull_policy: never
@@ -126,7 +117,6 @@ services:
       MACHINE_NAME: api-b
     ports: ["8002:8000"]
 
-  # Each replica's host name is its container id, which is what worker_host and the admin page show.
   worker:
     image: imagegen-test-worker
     pull_policy: never

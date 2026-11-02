@@ -16,7 +16,6 @@ def make_user(email=None):
     return db.create_user(email or f"{uuid4()}@example.com", "argon2-hash")
 
 
-# Each test task is created one second after the previous one, so ordering by created_at never ties.
 CREATED_BASE = datetime.now(UTC) - timedelta(days=1)
 _ticks = itertools.count()
 
@@ -40,9 +39,6 @@ def make_task(user, size=256, key=None):
 
 def status(task):
     return db.get_task(task.id).status
-
-
-# --- Guarded status changes ---
 
 
 def test_claim_succeeds_once():
@@ -132,9 +128,6 @@ def test_fail_queued_only_from_queued():
     assert status(running) == "running"
 
 
-# --- Constraints ---
-
-
 def test_size_check_rejects_500():
     with pytest.raises(IntegrityError):
         make_task(make_user(), size=500)
@@ -144,7 +137,7 @@ def test_idempotency_key_unique_per_user():
     key = uuid4()
     first, second = make_user(), make_user()
     make_task(first, key=key)
-    make_task(second, key=key)  # another user may reuse it
+    make_task(second, key=key)
     with pytest.raises(IntegrityError):
         make_task(first, key=key)
 
@@ -158,9 +151,6 @@ def test_email_unique_case_insensitively():
 def test_role_check():
     with pytest.raises(IntegrityError):
         db.create_user("a@example.com", "h", role="root")
-
-
-# --- Queue reads ---
 
 
 def test_queue_follows_created_at():
@@ -212,9 +202,6 @@ def test_submit_helpers_in_one_transaction():
     assert task.status == "queued"
 
 
-# --- History ---
-
-
 def test_get_task_hides_other_users_tasks():
     owner, other = make_user(), make_user()
     task = make_task(owner)
@@ -225,7 +212,7 @@ def test_get_task_hides_other_users_tasks():
 def test_history_page_newest_first_with_cursor():
     user = make_user()
     tasks = [make_task(user) for _ in range(5)]
-    make_task(make_user())  # someone else's
+    make_task(make_user())
     first = db.history_page(user.id, limit=3)
     assert [t.id for t in first] == [t.id for t in reversed(tasks)][:3]
     second = db.history_page(user.id, before=first[-1].created_at, limit=3)
@@ -256,9 +243,6 @@ def test_delete_task():
     assert db.delete_task(task.id) is True
     assert db.get_task(task.id) is None
     assert db.delete_task(task.id) is False
-
-
-# --- Users and refresh tokens ---
 
 
 def test_users():

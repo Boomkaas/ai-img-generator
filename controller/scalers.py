@@ -48,7 +48,6 @@ class SwarmScaler:
         self.client = client
 
     def _service(self):
-        # Fetched every time: scaling needs the service's current version, and someone may have changed it.
         try:
             return self.client.services.get(self.service)
         except docker.errors.NotFound as exc:
@@ -67,9 +66,6 @@ class SwarmScaler:
             raise ScalerError(f"{self.service} is not a replicated service") from exc
 
     def set_replicas(self, n: int) -> None:
-        # Service.scale() sends the spec back with Docker's defaults filled in, which Swarm takes for a
-        # changed task template and answers by replacing every running worker. Only the replica count may
-        # change.
         service = self._service()
         spec = service.attrs["Spec"]
         self.client.api.update_service(

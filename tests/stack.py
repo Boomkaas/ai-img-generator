@@ -34,13 +34,12 @@ API_A = "http://localhost:8001"
 API_B = "http://localhost:8002"
 NGINX = "https://localhost:8443"
 NGINX_HTTP = "http://localhost:8080"
-ORIGIN = NGINX  # the stack's ALLOWED_ORIGINS
+ORIGIN = NGINX
 WORKERS = 2
 APIS = ("api_a", "api_b")
 PASSWORD = "correct horse battery"
-STOP_GRACE_S = 120  # the worker's stop_grace_period
+STOP_GRACE_S = 120
 
-# How the test process reaches the stack's Postgres, Redis and MinIO, on the ports compose publishes.
 DIRECT_ENV = {
     "DATABASE_URL": "postgresql+psycopg://imagegen:imagegen@localhost:5442/imagegen",
     "REDIS_URL": "redis://localhost:6389/0",
@@ -90,7 +89,7 @@ class Stack:
         self.db = Database()
         self.storage = storage
         self.workers = WORKERS
-        self._env: dict[str, dict[str, str]] = {}  # per service, settings changed for the current test
+        self._env: dict[str, dict[str, str]] = {}
         self._stopped_apis: set[str] = set()
         self._background: list[subprocess.Popen] = []
         self._override = Path(tempfile.mkdtemp(prefix="imagegen-test-")) / "override.yml"
@@ -98,8 +97,6 @@ class Stack:
     @property
     def redis(self):
         return live.client()
-
-    # --- docker compose -------------------------------------------------------------------------------------
 
     def compose(self, *args: str, timeout: float = 300) -> str:
         files = ["-f", str(COMPOSE_FILE)]
@@ -160,8 +157,6 @@ class Stack:
                 return container
         raise AssertionError(f"no running worker container has the host name {host!r}")
 
-    # --- Workers --------------------------------------------------------------------------------------------
-
     def scale_workers(self, n: int) -> None:
         """Run exactly `n` workers and wait until each has loaded and reports idle."""
         self.compose("up", "-d", "--no-deps", "--scale", f"worker={n}", "worker")
@@ -217,8 +212,6 @@ class Stack:
         wait_for(settled, timeout, lambda: f"workers not idle: {self._worker_states()}, "
                  f"queue length {self.redis.llen(live.GENERATION_QUEUE)}\n{self.logs('worker')}")  # fmt: skip
 
-    # --- Waiting for tasks ----------------------------------------------------------------------------------
-
     def describe(self, task_id) -> str:
         row = self.db.task(task_id)
         return f"task row: {dict(row._mapping) if row else None}\nworker logs:\n{self.logs('worker')}"
@@ -255,8 +248,6 @@ class Stack:
         wait_for(lambda: needle in self.logs("worker", tail=500), timeout,
                  lambda: f"no worker logged {needle!r}\n{self.logs('worker')}", interval=0.5)  # fmt: skip
 
-    # --- Redis, API servers and Nginx -----------------------------------------------------------------------
-
     def restart_redis(self, keep_data: bool) -> None:
         if keep_data:
             self.compose("restart", "redis")
@@ -280,7 +271,7 @@ class Stack:
     def reload_nginx(self) -> None:
         """Make Nginx look up the API servers' addresses again: a recreated container gets a new one."""
         self.compose("exec", "-T", "nginx", "nginx", "-s", "reload")
-        time.sleep(1)  # the old worker processes finish their requests first
+        time.sleep(1)
         wait_for(self._nginx_answers, 30, lambda: "Nginx did not answer after the reload")
 
     def _nginx_answers(self) -> bool:
@@ -302,8 +293,6 @@ class Stack:
             counts[hb.machine] = counts.get(hb.machine, 0) + hb.sockets
         return counts
 
-    # --- Between tests --------------------------------------------------------------------------------------
-
     def reset(self) -> None:
         for process in self._background:
             process.wait()
@@ -318,7 +307,6 @@ class Stack:
         self.compose("up", "-d", "--no-deps", "--scale", f"worker={WORKERS}", "worker")
         self.workers = WORKERS
 
-        # Stop whatever the last test left running, so the workers are free within a second.
         for task in db.active_tasks():
             db.cancel_task(task.id, None)
             live.request_cancel(task.id)
@@ -389,9 +377,6 @@ def receive(socket, timeout: float = 10) -> dict:
     return json.loads(socket.recv(timeout=timeout))
 
 
-# --- Fixtures, registered once in tests/conftest.py so one session starts one stack ------------------------
-
-
 @pytest.fixture(scope="session")
 def stack(request):
     patch = pytest.MonkeyPatch()
@@ -409,7 +394,6 @@ def stack(request):
         started = True
         yield running
     finally:
-        # A stack that never came up has the most telling logs of all.
         running.down(keep_logs=not started or request.session.testsfailed > failed_before)
         db.dispose_engine()
         live.reset_client()

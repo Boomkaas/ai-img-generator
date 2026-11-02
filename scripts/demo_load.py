@@ -30,7 +30,6 @@ def minutes(seconds: float | None) -> str:
 
 
 def submit_all(base_url: str, insecure: bool, users: int, size: int) -> list[dict]:
-    # Every account first, so the submits land within a second of each other.
     clients = []
     for _ in range(users):
         client = Client(base_url, insecure)

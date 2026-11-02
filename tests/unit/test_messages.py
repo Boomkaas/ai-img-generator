@@ -138,5 +138,4 @@ def test_doc_example_matches_its_model(name, example):
     parsed = model.model_validate(example)
     if name not in ("TaskOut", "TaskPage"):
         assert type(m.parse_message(json.dumps(example))) is model
-    # The doc shows exactly the fields the server sends.
     assert json.loads(parsed.model_dump_json()).keys() == example.keys()

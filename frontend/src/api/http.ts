@@ -1,6 +1,5 @@
 import type { AdminOverview, CancelOut, TaskOut, TaskPage, User } from "./types";
 
-/** The server answered with an error status; `detail` is its sentence for the user, if it sent one. */
 export class ApiError extends Error {
   readonly status: number;
   readonly body: Record<string, unknown> | null;
@@ -12,7 +11,6 @@ export class ApiError extends Error {
   }
 }
 
-/** No answer at all: the network is down, or the server died mid-request. */
 export class NetworkError extends Error {}
 
 const signedOutListeners = new Set<() => void>();
@@ -26,7 +24,6 @@ export function notifySignedOut(): void {
   signedOutListeners.forEach((listener) => listener());
 }
 
-// A 401 from these is the answer itself, not an expired access token.
 const NO_REFRESH = new Set([
   "/api/auth/login",
   "/api/auth/register",
@@ -36,12 +33,6 @@ const NO_REFRESH = new Set([
 
 let refreshing: Promise<boolean> | null = null;
 
-/**
- * Trade the refresh cookie for a new access cookie: true if that worked, false if the server refused it.
- * Rejects with NetworkError or ApiError when there was no clear answer, so a dropped connection doesn't sign
- * the user out. Callers that arrive together share one request: the server takes a refresh token used twice
- * for a stolen one and ends every session of the user.
- */
 export function refreshSession(): Promise<boolean> {
   refreshing ??= send("POST", "/api/auth/refresh")
     .then(async (response) => {
@@ -62,7 +53,6 @@ async function send(
   headers: Record<string, string> = {},
 ): Promise<Response> {
   const init: RequestInit = { method, credentials: "same-origin", headers: { ...headers } };
-  // The server refuses a POST that isn't JSON, even one without a body.
   if (method === "POST") {
     init.headers = { ...headers, "Content-Type": "application/json" };
     if (body !== undefined) init.body = JSON.stringify(body);
@@ -123,10 +113,6 @@ export const getAdminOverview = () => request<AdminOverview>("GET", "/api/admin/
 
 export const cancelAnyTask = (id: string) => request<CancelOut>("DELETE", `/api/admin/tasks/${id}`);
 
-/**
- * Submit a prompt. The key is made once per click, so the one retry after a lost answer returns the task
- * the first attempt may already have created instead of making a second.
- */
 export async function submitTask(prompt: string, size: number): Promise<TaskOut> {
   const headers = { "Idempotency-Key": crypto.randomUUID() };
   const attempt = () => request<TaskOut>("POST", "/api/tasks", { prompt, size }, headers);
