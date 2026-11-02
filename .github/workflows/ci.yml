@@ -128,7 +128,7 @@ jobs:
         run: .venv/bin/playwright install --with-deps --only-shell chromium
       - name: Tests
         run: make test-${{ matrix.suite }} NO_BUILD=1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: ${{ matrix.suite }}-results
