@@ -12,7 +12,7 @@ dependencies = [
     "pydantic>=2",
     "pydantic-settings",
     "sqlalchemy>=2",
-    "psycopg[binary]>=3",
+    "psycopg[binary]>=3.3.6",
     "alembic",
     "redis>=5",
     "boto3",
