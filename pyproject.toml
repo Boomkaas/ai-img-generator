@@ -16,7 +16,7 @@ dependencies = [
     "alembic",
     "redis>=5",
     "boto3",
-    "celery[redis]>=5.4",
+    "celery[redis]>=5.6.3",
     "psutil",
 ]
 
